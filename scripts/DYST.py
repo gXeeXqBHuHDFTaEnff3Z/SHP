@@ -54,9 +54,9 @@ global crit_fraction_low
 ###
 # Configuration for ECC mode. This approach has not further been implemented and is experimental
 ###
-BCH_POLYNOMIAL = 8219
-BCH_BITS = 1
-bch = bchlib.BCH(BCH_POLYNOMIAL, BCH_BITS)
+#BCH_POLYNOMIAL = 8219
+#BCH_BITS = 1
+#bch = bchlib.BCH(BCH_POLYNOMIAL, BCH_BITS)
 
 
 ###
@@ -128,7 +128,7 @@ def isSignal(packet,prot):
     else :return False
 
 ###
-# Determins if packet is intresting for DYST
+# Determines if packet is interesting for SHP
 ###
 def isPktOfInterest(packet):
     global hwv4_broadcast  ## MAC address for broadcasts
