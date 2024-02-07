@@ -1,18 +1,17 @@
-# DYST (*Did You See That?*) – A Covert Channel Exploiting Recent Legitimate Traffic
+# SHP (*Silent History Protocol*) – A Covert Channel Exploiting Recent Legitimate Traffic
 
-This repository contains the proof-of-concept implementation of the **DYST** covert channel introduced in the following article:
+This repository contains the proof-of-concept implementation of the **SHP** covert channel introduced in the following article:
 
-| Steffen Wendzel, Tobias Schmidbauer, Sebastian Zillien, Jörg Keller: **[Did You See That? A Covert Channel Exploiting Recent Legitimate Traffic](https://arxiv.org/abs/2212.11850)**, pre-print, arXiv:2212.11850, December 2022. |
-|----|
+(not there yet)
 
 
 ## Live Mode
 
-Live mode of DYST. This mode will send a covert message via the DYST covert channel.
+Live mode of SHP. This mode will send a covert message via the SHP covert channel.
 
 ### Usage
 ```
-sudo python3 DYST.py <Covert Message File> <# of Chars>   <interface> <logfile binaries> <[cr|cs]> <[trivial_single|trivial_multiple|ECC]> <CS and CR! :Broadcast Target IP> <Signal Source IP (=CS IP)> <CR:Message Log>
+sudo python3 SHP.py <Covert Message File> <# of Chars> <interface> <logfile binaries> <[cr|cs]> <[trivial_single|trivial_multiple|ECC]> <Broadcast Target IP> <CR: Signal Source IP (=CS IP)> <CR:Message Log>
 ```
 
 - `Covert Message File`
@@ -32,7 +31,7 @@ sudo python3 DYST.py <Covert Message File> <# of Chars>   <interface> <logfile b
     - ext: DYST-Ext, uses checksums for faster trnsmission, no robustness measures
     - ext_robust: Same as ext, added robustness measures
     - ECC: Experimental DYST-ECC mode.
-- `Broadcast Target IP` (CR and CS)
+- `Broadcast Target IP`
   - Target IP that the CS will use in its signal-ARP-requests.
   - CR will watch for this IP to filter signals
 - `Signal Source IP` (CR only)
@@ -41,10 +40,10 @@ sudo python3 DYST.py <Covert Message File> <# of Chars>   <interface> <logfile b
   - Path to logfile which will contain teh recieved message
 
 ### CS Example
-`sudo python3 scripts/DYST.py config/The_Shadow_Out_of_Time.txt 2 wlan0 log/CS/HomeLANcs trivial_single 192.168.2.254 2>/dev/null`
+`sudo python3 scripts/SHP.py config/The_Shadow_Out_of_Time.txt 2 wlan0 log/CS/HomeLAN cs trivial_single 192.168.2.254`
 
 ### CR Example
-`sudo python3 scripts/DYST.py config/The_Shadow_Out_of_Time.txt 2 wlan0 log/CR/HomeLan cr trivial_single 192.168.2.254 192.168.2.146 log/CR/HomeLan_msg 2>/dev/null`
+`sudo python3 scripts/SHP.py config/The_Shadow_Out_of_Time.txt 2 wlan0 log/CR/HomeLan cr trivial_single 192.168.2.254 192.168.2.146 log.txt`
 
 ## Offline Mode
 
