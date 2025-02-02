@@ -1,95 +1,79 @@
-# SHP (*Silent History Protocol*) – A Covert Channel Exploiting Recent Legitimate Traffic
+# SHP Project Repository
 
-This repository contains the proof-of-concept implementation of the **SHP** covert channel introduced in the following article:
+## Overview
 
-(not there yet)
+The **SHP Project** is a collection of tools and scripts designed to explore and implement the **Silent History Protocol (SHP)** for covert network communication. The project consists of:
 
+- **SHPsimulator**: A Python script for offline processing and analysis of network-history covert channels using PCAP/PCAPNG files.
+- **SHPlive**: A real-time server-client implementation of SHP, allowing covert communication over live network traffic.
 
-## Live Mode
+This project is based on research outlined in the paper *"Silence Speaks Volumes: A New Paradigm for Covert Communication via Network-History Timing Patterns"* by Christoph Weissenborn and Steffen Wendzel.
 
-Live mode of SHP. This mode will send a covert message via the SHP covert channel.
+---
 
-### Usage
+## Repository Structure
+
 ```
-sudo python3 SHP.py <Covert Message File> <# of Chars> <interface> <logfile binaries> <[cr|cs]> <[trivial_single|trivial_multiple|ECC]> <Broadcast Target IP> <CR: Signal Source IP (=CS IP)> <CR:Message Log>
-```
-
-- `Covert Message File`
-  - Path to a text file containing the covert message to be sent
-- `# of Chars`
-  - How many characters to sent at once
-- `interface`
-  - What netwotk interface to use for the covert channel
-- `logfile binaries`
-  - Path to the logfile for statistics (seen hashes, match percentages, timestamps, etc.)
-- `cr|cs`
-  - What mode to use? Covert Sender or Covert Receiver
-- `trivial|trivial_robust|ext|ext_robust|ECC`
-  - What encoding mode to use?
-    - trivial: DYST-Basic, waits for 100% matches for each signal, no robustness measures
-    - trivial_robust: Same as trivial, added robustness measures
-    - ext: DYST-Ext, uses checksums for faster trnsmission, no robustness measures
-    - ext_robust: Same as ext, added robustness measures
-    - ECC: Experimental DYST-ECC mode.
-- `Broadcast Target IP`
-  - Target IP that the CS will use in its signal-ARP-requests.
-  - CR will watch for this IP to filter signals
-- `Signal Source IP` (CR only)
-  - The IP of the covert sender, is used to filter signals
-- `Message Log` (CR only)
-  - Path to logfile which will contain teh recieved message
-
-### CS Example
-`sudo python3 scripts/SHP.py config/The_Shadow_Out_of_Time.txt 2 wlan0 log/CS/HomeLAN cs trivial_single 192.168.2.254`
-
-### CR Example
-`sudo python3 scripts/SHP.py config/The_Shadow_Out_of_Time.txt 2 wlan0 log/CR/HomeLan cr trivial_single 192.168.2.254 192.168.2.146 log.txt`
-
-## Offline Mode
-
-Offline Mode to analyse pcap files for matches. Reads pcap files packet by packet and looks for matches.
-
-For each `PacketOfInterest`, the match (true/false), number of `PacketOfInterest`, total number of packets, match percentage/count and match time is recorded.
-
-With this we can do statistics on how often we would send out an ARP packet, either based on time or on packet count.
-
-The tool needs the broadcast IP of the subnet from the recording to know wich packets can be seen by CS and CR.
-
-`offlineMode.py` contains robustness measures while `offlineMode_nonrobust.py` does not.
-
-### Example call - Basic
-```
-python scripts/offlineMode.py /config/The_Shadow_Out_of_Time.txt 3 test.pcapng basic 192.168.200.255 test.out
-```
-The basic mode uses no checksums and waitss for a 100% match between hash and message
-
-### Example call - Extended
-```
-python scripts/offlineMode.py /config/The_Shadow_Out_of_Time.txt 2 test.pcapng ext 192.168.200.255 test.out 21
-```
-The extended mode uses a basic 8 bit checksum (byte alignment). The checksum contains the number of 1s in the original message, binary encoded.
-
-### Usage
-```
-python offlineMode.py <Message Input File> <Bytes per Pkt> <Pcap Input> <Mode> <Broadcast IP of Recording> <Output File> [<Match Target>]
+SHP-Project/
+│   README.md  (this file)
+│   SHPsimulator/
+│   ├── SHPsimulator.py
+│   ├── SHPsimulator_requirements.txt
+│   ├── results/
+│   ├── captures/
+│   ├── README.md
+│
+│   SHPlive/
+│   ├── SHPserver.py
+│   ├── SHPclient.py
+│   ├── SHPlive_requirements.txt
+│   ├── README.md
 ```
 
-- `Message Input File`
-  - Path to a text file containing the covert message to be sent
-- `Bytes per Pkt`
-  - How many bytes/characters to be sent at once
-- `Pcap Input`
-  - Path to a pcap file, which will be used as a base for the simulation
-- `Mode`
-  - `basic`: DYST-Basic mode
-  - `ext`: DYST-Ext mode
-- `Broadcast IP of Recording`
-  - What is the broadcast IP of the network present in the input pcap (is used to filter packets of interest)
-- `Output File`
-  - Path to the logfile for statistics (seen hashes, match percentages, timestamps, etc.)
-- `Match Target`(ext Mode only)
-  - How many bits to match in DYST-Ext mode before sendign a signal
+---
 
+## SHPsimulator
 
-## Log Folder
-The log folder contains some extracted example inter-packet delays (IPDs) in the CSV format.
+SHPsimulator is a Python script for offline simulation and analysis of SHP-based covert communication. It processes packet capture files (PCAP/PCAPNG) to evaluate signal encoding efficiency, error correction, and timing-based communication strategies.
+
+### **Installation & Usage**
+Refer to the [`SHPsimulator/README.md`](SHPsimulator/README.md) for installation steps and usage examples.
+
+---
+
+## SHPlive (Live Networking Server & Client)
+
+**SHPlive** provides a real-time implementation of the Silent History Protocol (SHP), enabling live covert communication between a **covert sender (CS)** and a **covert receiver (CR)** over an active network.
+
+### **Features**
+- Real-time packet capture and covert signaling
+- Supports multiple input sources for timing-based encoding
+- Packet jitter, delay, and packet loss simulation
+- Encrypted signaling with optional error correction codes (ECC)
+- Logs covert communication activity
+
+### **Installation**
+Ensure you have Python 3.x installed and install the required dependencies from the respective folders.
+
+## Contributing
+
+We welcome contributions to the project! Feel free to:
+- Report issues
+- Submit pull requests
+- Suggest enhancements
+
+For major contributions, please discuss your proposed changes by opening an issue first.
+
+---
+
+## References
+This repository is based on the research from:
+- *Silence Speaks Volumes: A New Paradigm for Covert Communication via Network-History Timing Patterns* by Christoph Weissenborn & Steffen Wendzel
+
+---
+
+## License
+This project is released under the MIT License. See `LICENSE` for details.
+
+For questions or contributions, feel free to open an issue or pull request on GitHub!
+

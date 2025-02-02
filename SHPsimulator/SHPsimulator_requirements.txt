@@ -1,0 +1,65 @@
+=== Mission ===
+The scripts mission is to calculate matches for the SHA algorithm from a folder containing PCAP or PCAPNG files. For this the script needs to parse the packets in these files as a stream and calculate if the bits of the current secret message chunk match the bits of the deskewed source bits taken from the current PDU.
+
+=== SHA Parameterisation ===
+The scripts needs to support the following SHA parameters:
+
+for packet filtering:
+• mode_filter (default: bpf) [bpf, software]
+• poi (PDU of interest) [all, broadcast, port]
+• silence (number of milliseconds in which all traffic after a packet is ignored to discriminate Messages,default=0) [int 0-10000]
+
+for SHP:
+• bitlength (number of message and source bits to compare) [1..n]
+• inputsource (source of raw data) [IPD, ISD-packet, ISD-alone, ISPN, timestamp, payload]
+• timing_window (number of time windows in one second, rounding all timestamps to the nearest window middle) [1..1000]
+• subchanneling (dividing the cc into subchannels to avoid near-zero IPD) [none, baseipd, ip hash, system clock, system clock hash]
+• subchanneling bits (number of bits for subchannel selection) [0..n]
+• rehash (max count of repeated hashing to increase hit probability per packet) [0..n]
+• out-of-order-delivery (sending ahead and subsequent reordering of the message chunks using sequence numbers) [0..n]
+• ecc (error correcting code) [none, hamming, hamming+, inline-hamming+]
+
+for simulation:
+• saveWithPointer (if TRUE will save all POI to a pcapng file. for every SHP match will create an arp pointer to 127.55.0.1 in that file as well, just behind the matched packet.)
+
+for statistics:
+• path_file_results (Default: './results/shp-simulator-results.csv'
+
+=== Processing ===
+1. Change the working Directory to the scripts Directory
+2. open pcap as stream
+3. filter out all packets in silence interval
+4. filter out all packets that are not POI
+5. Keep all POI in a revolving Array (last 100 POI)
+6. check isMatch(packet) function for SHP Matches
+	a) determine Input bits from packet by inputsource
+	b) check if Input bits are == current message bits
+7. save pcap if applicable
+8. append results to path_file_results (or create it if neccessary)
+
+=== Results ===
+The script needs to calculate the following resulting values:
+• number of seconds in pcap (counter_connection_seconds)
+• number of all packets on wire (counter_packets)
+• number of packets ignored in silence interval (counter_packets_ignored_silence)
+• number of POI (counter_poi)
+• number of SHP Matches (counter_matches)
+• number of message bits transmitted (counter_ccbits = bitlength * counter_matches)
+• average signal distance (counter_matches / counter_packets_received)
+• bandwidth in bps (bitlength*counter_ecc_matches / counter_connection_seconds)
+• bandwidth steganographic (bitlength / average match distance)
+• covert amplification fator (CAF, bitlength / )
+• steganographic bandwidth
+• Fitness score (0 when CAF 1 or lower, else bps*ecc hitrate)
+
+=== Performance ===
+• the script MUST be able to support processing PCAP and PCAPNG files that are larger than RAM (up 20 GB)
+• for measuring performance the script needs to record total runtime, time in processed file, number of pdu processed and number of gbit processed, cache hitrate
+• The script does not need to support multiple processors. Parallel processing is done by calling the script multiple times in parallel.
+• frequently called deterministic methods should be LRU-cached to improve performance and decrease CPU load per execution
+• the script may support batch processing
+
+=== Fault Tolerance ===
+• the scripts needs to support graceful degradation if a PDU is not formed as expected
+	• if an ipd can not be calculated for the pdu, the pdu needs to be skipped
+	• if a subchannel can not be calculated for the PDU, it is assumed to be subchannel 0

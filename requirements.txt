@@ -1,7 +1,0 @@
-bchlib
-bitstring
-netaddr
-netifaces
-numpy
-scapy
-pandas
