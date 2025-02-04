@@ -1,41 +1,61 @@
 === Mission ===
-The scripts mission is to calculate matches for the SHA algorithm from a folder containing PCAP or PCAPNG files. For this the script needs to parse the packets in these files as a stream and calculate if the bits of the current secret message chunk match the bits of the deskewed source bits taken from the current PDU.
+The scripts mission is to calculate matches for the SHA algorithm from a folder containing PCAP or PCAPNG files. For this the script needs to parse the packets in these files as a stream and calculate if the bits of the current secret message chunk match the bits of the sha3-hashed source bits taken from the current PDU.
 
-=== SHA Parameterisation ===
+=== SHA Parameterization ===
 The scripts needs to support the following SHA parameters:
 
 for packet filtering:
+• path_file_pcap (default: '../_pcaps/test.pcap')
 • mode_filter (default: bpf) [bpf, software]
 • poi (PDU of interest) [all, broadcast, port]
-• silence (number of milliseconds in which all traffic after a packet is ignored to discriminate Messages,default=0) [int 0-10000]
+• silence (if two packets are within each others silence interval, both are ignored as POI; default=0) [int 0-10000]
 
 for SHP:
-• bitlength (number of message and source bits to compare) [1..n]
-• inputsource (source of raw data) [IPD, ISD-packet, ISD-alone, ISPN, timestamp, payload]
-• timing_window (number of time windows in one second, rounding all timestamps to the nearest window middle) [1..1000]
-• subchanneling (dividing the cc into subchannels to avoid near-zero IPD) [none, baseipd, ip hash, system clock, system clock hash]
-• subchanneling bits (number of bits for subchannel selection) [0..n]
-• rehash (max count of repeated hashing to increase hit probability per packet) [0..n]
-• out-of-order-delivery (sending ahead and subsequent reordering of the message chunks using sequence numbers) [0..n]
-• ecc (error correcting code) [none, hamming, hamming+, inline-hamming+]
+• path_file_message: File containing the secret message. (default='../data/secret_udhr.txt')
+• bitlength: number of message and source bits to compare [1..n]
+• inputsource: source of raw data [IPD, ISD-packet, ISD-alone, ISPN, timestamp, payload]
+• timing_window: number of time windows in one second, rounding all timestamps to the nearest window middle [1..1000]
+• subchannel: dividing the cc into subchannels to avoid near-zero IPD [none, iphash, fulldata]. shp is then calculated per subchannel. to determine the subchannel, hash the ip or all packet data bits and then use modulo on the result.
+• subchannel_bits: number of bits for subchannel selection (2^n subchannels) [0..n]
+• diffusion: algorithm that creates input avalanche effect [BLAKE2, SHA3]
+• averaging: the shp result is the average of the last n diffused values [1..256]
+• rehash: max count of repeated hashing to increase hit probability per packet [0..n]
+• ooodelivery: out-of-order-delivery: sending ahead and subsequent reordering of the message chunks using sequence numbers [0..n]
+• ecc: error correcting code [none, hamming, hamming+, inline-hamming+]
+	• hamming adds a hamming code without parity bit to the message bits
+	• hamming+ adds a hamming code with parity bit to the message bits
+	• inline-hamming+ will
+		1. convert the message_bits at the start into pieces of 2*bitlength and add the hamming code to each piece and then use this as message_bits
+• saveWithPointer: if TRUE will save all POI to a pcapng file. for every SHP match will create an arp pointer to 127.55.0.1 in that file as well, just behind the matched packet. (Default: False)
 
 for simulation:
-• saveWithPointer (if TRUE will save all POI to a pcapng file. for every SHP match will create an arp pointer to 127.55.0.1 in that file as well, just behind the matched packet.)
+• simulateCR (When set will also simulate covert receiver.; default: False)
+• packetloss: Percent of PDUs that are lost between CS and CR. Default 0 = disabled. Maximum allowed value is 100.
+• jitter: Milliseconds of average simulated delay standard deviation between CS and CR. Default 0 = disabled.
 
 for statistics:
 • path_file_results (Default: './results/shp-simulator-results.csv'
+• comment: An optional comment field for the summary file. Will contain 'V{version_number} {comment}'
 
 === Processing ===
 1. Change the working Directory to the scripts Directory
-2. open pcap as stream
-3. filter out all packets in silence interval
-4. filter out all packets that are not POI
-5. Keep all POI in a revolving Array (last 100 POI)
-6. check isMatch(packet) function for SHP Matches
-	a) determine Input bits from packet by inputsource
-	b) check if Input bits are == current message bits
-7. save pcap if applicable
-8. append results to path_file_results (or create it if neccessary)
+2. load message from path_file_message and convert to message_bits
+3. open pcap as stream
+4. filter out all packets in silence interval
+5. filter out all packets that are not POI
+6. Keep all POI in a revolving Array (last 100 POI)
+7. check isMatch(packet) function for SHP Matches
+	a) determine input bits from packet by inputsource
+		• IPD: inter-packet delay to last POI, rounded by timing_window
+		• ISD-packet: inter-packet delay since last packet match, rounded by timing_window
+		• ISPN: inter-signal packet number (number of POI since last signal)
+		• timestamp: packet timestamp, rounded by timing_window
+		• payload: full packet data bytes
+	b) apply diffusion algorithm
+	c) check if diffused_bits == current message_bits chunk
+8. if isMatch then simulate sending a cc message by advancing the current message_bits index by bitlength
+9. save pcap if saveWithPointer is TRUE, including an ARP request to 172.55.99.99 for each isMatch
+10. append results to path_file_results (or create it if neccessary)
 
 === Results ===
 The script needs to calculate the following resulting values:
@@ -53,13 +73,12 @@ The script needs to calculate the following resulting values:
 • Fitness score (0 when CAF 1 or lower, else bps*ecc hitrate)
 
 === Performance ===
-• the script MUST be able to support processing PCAP and PCAPNG files that are larger than RAM (up 20 GB)
+• the script MUST be able to support processing PCAP and PCAPNG files that are larger than RAM (up 20 GB), so use stream processing
+• optimize the script for highly efficient parsing and calculation. use dpkt or PyShark.
 • for measuring performance the script needs to record total runtime, time in processed file, number of pdu processed and number of gbit processed, cache hitrate
-• The script does not need to support multiple processors. Parallel processing is done by calling the script multiple times in parallel.
 • frequently called deterministic methods should be LRU-cached to improve performance and decrease CPU load per execution
-• the script may support batch processing
 
 === Fault Tolerance ===
 • the scripts needs to support graceful degradation if a PDU is not formed as expected
-	• if an ipd can not be calculated for the pdu, the pdu needs to be skipped
+	• if shp can not be calculated for the pdu, the pdu needs to be skipped
 	• if a subchannel can not be calculated for the PDU, it is assumed to be subchannel 0

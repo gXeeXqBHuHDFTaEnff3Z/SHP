@@ -3,6 +3,7 @@ A Python script that will run a cybersecurity experiment iteratively using diffe
 
 === Input ===
 --iterations", type=int, default=2, help="Number of GA iterations to run."
+--timeout", type=int, default=300, help="Number of seconds for iteration timeout."
 --skip_initial", action="store_true", help="Skip the initial parameter set run."
 --skip_full", action="store_true", help="Skip the full parameter set run."
 --ga_population_size", type=int, default=10, help="Population size for the genetic algorithm."
@@ -12,12 +13,14 @@ A Python script that will run a cybersecurity experiment iteratively using diffe
 === Processing ===
 1. Generate Initial Parameter Set
 2. Run Initial Experiments: Start the server script, then start the client script after four seconds, and wait for results. Do this for all initial sets of Parameters, one after the other finishes.
+3. If one iteration takes longer than timeout seconds, add this combination to the results with a FITNESS='-1' and comment 'factory timeout'.
 
 After the initial Parameter space, we continue by testing the full Parameter space:
 3. Generate Full Parameter Set: Create all possible parameter combinations and filter out invalid ones (e.g. subchanneling bits but no subchanneling used).
 4. Run further Experiments: Start the server script, then start the client script after five seconds, and wait for results.
-5. Evaluate Results: Extract and analyze the `caf`, `avgdistance_all`, and `steganographic_bandwidth` values from `stats_server.csv`.
-6. Use Genetic Algorithm: Improve parameter selection for the next experiment Iteration using genetic algorithms on the results achieved so far. Make sure no combination is run twice from the `stats_server.csv`
+5. If one iteration takes longer than timeout seconds, add this combination to the results with a FITNESS='-1' and comment 'factory timeout'.
+6. Evaluate Results: Extract and analyze the `caf`, `avgdistance_all`, and `steganographic_bandwidth` values from `stats_server.csv`.
+7. Use Genetic Algorithm: Improve parameter selection for the next experiment Iteration using genetic algorithms on the results achieved so far. Make sure no combination is run twice from the `stats_server.csv`
 
 === Parameter Spaces (hardcoded at the start) ===
 # Initial Parameter space:
@@ -39,15 +42,4 @@ subchanneling (none, baseipd, iphash, clockhash)
 subchanneling_bits (0,2,4,8)
 ecc (none, hamming, hamming+, inline-hamming+)
 multihashing (0,2,4,8)
-
-# Define default static values for server and client parameters not in the experiment domain
-DEFAULT_PARAMS = {
-    "port": "443",
-    "subnet": "10.0.0.0/8",
-    "silence_poi": "2",
-    "silence_cc": "2",
-    "deskew": "sha3",
-    "path_secret": "secret_message_short.txt",
-    "savepcap": "False"
-}
 

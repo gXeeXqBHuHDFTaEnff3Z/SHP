@@ -47,20 +47,6 @@ message_received = '' # message received as readable string after completion
 secret_bits = "" # data received and acceptes so far
 stop_sniffing = False # used to stop the script
 
-# Build the full path for the log file
-log_file = os.path.join(script_dir, 'SHPserver.log')
-
-# Configure logging for error tracking
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    handlers=[
-        #logging.FileHandler(log_file),  # Write to file
-        logging.StreamHandler()         # Also write to console
-    ]
-)
-
 # Check if pcap file exists; if not, create an empty one
 if not os.path.exists(packet_pcap_file):
     open(packet_pcap_file, 'wb').close()  # Create an empty file if it doesn't exist
@@ -69,6 +55,21 @@ if not os.path.exists(packet_pcap_file):
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Packet capture and filtering based on POI, port, and subnet.")
     
+    # log level
+    parser.add_argument(
+        '--mode',
+        type=str,
+        default='info',
+        choices=['debug', 'info', 'warning', 'error'],
+        help="Set the logging mode. 'debug' for DEBUG level logging, 'info' for INFO level."
+    )
+    parser.add_argument(
+        '--log_file',
+        type=str,
+        default='SHPserver.log',
+        help="Path to the log file."
+    )
+
     # arguments for poi filter
     parser.add_argument('--poi', type=str, default="broadcast_bpf", help="Packet of interest type.") # all, port, subnet, broadcast_domain, broadcast_bpf
     parser.add_argument('--port', type=int, choices=range(0, 65536), default=443, help="Port number for POI (0-65535).")
@@ -217,7 +218,7 @@ def process_packet(arp_sender, packet, poi, port, subnet, inputsource, deskew, b
     # -> its a valid POI
     counter_poi_received += 1
     display_poi_info(packet)
-       
+
     # Check if packet is a covert channel message
     isCovert, bits3, bits4 = SHP_live_networking.is_covert_pointer(packet, SHP_live_networking.STATIC_IP_CC)
         
@@ -239,14 +240,14 @@ def process_packet(arp_sender, packet, poi, port, subnet, inputsource, deskew, b
         # If received in rappid succession, ignore other CC
         if (packet.time - last_cc_time) * 1000 < silence_cc:
             counter_cc_ignored_because_silence += 1
-            logging.info(f"CC Message in CC silence interval ignored: {packet[ARP].pdst} with options [{bits3}:{bits4}]@{packet.time}")
+            logging.info(f"CC Message in CC silence interval with options [{bits3}:{bits4}]@{packet.time}")
             return
         
         # Handle CC START message
         elif (bits4 == SHP_live_networking.STATIC_BITSTRING_INIT):
             timestamp_start = packet.time
             source_start = packet[ARP].psrc  # Note down the source IP
-            logging.info(f"Received covert channel START: {packet[ARP].pdst} with options [{bits3}:{bits4}]@{packet.time}")
+            logging.info(f"Received covert channel START with options [{bits3}:{bits4}]@{packet.time}")
             return
         
         # Ignore CC RETRY
@@ -259,7 +260,7 @@ def process_packet(arp_sender, packet, poi, port, subnet, inputsource, deskew, b
             counter_cc_pointer_received += 1
             
             # Display data packet pointed to
-            #logging.info(f"Last POI before pointer with options [{bits3}:{bits4}] was @{list_last_data_pois[0].time}. Parsing as data.")
+            logging.debug(f"Last POI before pointer with options [{bits3}:{bits4}]@{list_last_data_pois[0].time}. Parsing as data.")
 
             # parse data from data channel packet
             source_data, secret_bits_new, subchannel, last_packet_time, last_data_per_subchannel, timestamp_start, ecc_match = SHP_algos.parse_datapacket(
@@ -284,25 +285,15 @@ def process_packet(arp_sender, packet, poi, port, subnet, inputsource, deskew, b
             else: # Watchdog Checksums check out, add to received message
                 counter_watchdog_ecc_matches += 1
                 secret_bits = secret_bits + secret_bits_new
-                #logging.info(f"### Received data | source:{source_data} | deskewed:{secret_bits_new} | checksum is:{checksum_is}=={checksum_should} | msg length [{str(len(secret_bits))}]")
+                logging.info(f"Received data | source:{source_data} | deskewed:{secret_bits_new} | checksum is:{checksum_is}=={checksum_should} | msg length [{str(len(secret_bits))}]")
             
         # Handle no START, no FIN and we had no data packets to point to
         else:
             SHP_live_networking.send_arp_request(arp_sender, '00000000', SHP_live_networking.STATIC_BITSTRING_RETRY)
-            logging.warning(f"No valid data POI packet was captured before this covert channel message (arp request for {packet[ARP].pdst} and options {bits4}).")
+            logging.warning(f"No valid data POI seen before CC message with options {bits3}:{bits4}@{packet.time}).")
             counter_data_ignored_because_timeout += 1
 
         last_cc_time = packet.time
-
-        # update last data that uses each packet
-        if (inputsource == 'IPD'):
-            last_data_per_subchannel[subchannel] = packet.time
-        elif (inputsource == 'ISPN'):
-            if last_data_per_subchannel:
-                last_data_per_subchannel[subchannel] += 1
-            else:
-                last_data_per_subchannel[subchannel] = 0
-        
         
         return
 
@@ -311,13 +302,24 @@ def process_packet(arp_sender, packet, poi, port, subnet, inputsource, deskew, b
     count_poi_in_silence, _ = SHP_algos.flush_poi_list(packet, list_last_data_pois, silence_poi)
     counter_data_ignored_because_silence += count_poi_in_silence
     if (count_poi_in_silence > 0):
-        #logging.info(f"{count_poi_in_silence} data POI in silence interval ({packet.time:.4f} - {last_poi_time:.4f} = {packet.time-last_poi_time:.4f}s < {silence_poi}ms). Skipped.")
+        logging.info(f"{count_poi_in_silence} data POI in silence interval ({packet.time:.4f} - {last_poi_time:.4f} = {packet.time-last_poi_time:.4f}s < {silence_poi}ms). Skipped.")
         return
 
     # a POI that is not a pointer is a possible data packet for future pointers
     list_last_data_pois.insert(0, packet)
     last_poi_time = packet.time
 
+    # a POI that is not a pointer is counter in the last_data
+    if (inputsource == 'IPD'):
+        subchannel = SHP_algos.get_subchannel(packet, subchanneling, subchanneling_bits, last_packet_time, rounding_factor)
+        last_data_per_subchannel[subchannel] = packet.time
+    elif (inputsource == 'ISPN'):
+        subchannel = SHP_algos.get_subchannel(packet, subchanneling, subchanneling_bits, last_packet_time, rounding_factor)
+        ispn_counter = last_data_per_subchannel.get(subchannel)
+        ispn_counter = (ispn_counter + 1) if ispn_counter is not None else 1
+        last_data_per_subchannel[subchannel] = ispn_counter
+    return
+    
 # Display POI Packet Info on Command Line
 def display_poi_info(packet):
     try:
@@ -339,7 +341,7 @@ def display_poi_info(packet):
         elif mac_dst == "ff:ff:ff:ff:ff:ff":
             packet_type = "ETH_BROADCAST"
 
-        #logging.info(f"POI @{time} | MAC: {mac_src} -> {mac_dst} | IP: {ip_src} -> {ip_dst} | Length: {packet_length} | Type: {packet_type if packet_type else 'N/A'}")
+        logging.debug(f"POI @{time} | MAC: {mac_src} -> {mac_dst} | IP: {ip_src} -> {ip_dst} | Length: {packet_length} | Type: {packet_type if packet_type else 'N/A'}")
 
     except Exception as e:
         logging.error("[ERROR] displaying packet: %s", e)
@@ -513,11 +515,49 @@ def start_shpserver(arp_sender, poi, port, subnet, inputsource, deskew, bitlengt
         if 'capture_thread' in locals() and capture_thread.is_alive():
             logging.warning("Capture thread did not terminate cleanly")
 
+
+def setup_logging(log_file, mode):
+    """
+    Configures logging.
+
+    Args:
+        log_file (str): Path to the log file.
+        mode (str): Logging mode; 'debug' sets logging level to DEBUG,
+                    otherwise defaults to INFO.
+    """
+    # Set log level based on mode argument
+    if (mode.lower() == 'debug'):
+        log_level = logging.DEBUG
+    elif (mode.lower() == 'info'):
+        log_level = logging.INFO
+    elif (mode.lower() == 'warning'):
+        log_level = logging.WARNING
+    elif (mode.lower() == 'error'):
+        log_level = logging.ERROR 
+    else:
+        print('Cannot setup logging.')
+        return
+
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(log_file),  # Write logs to file
+            logging.StreamHandler()         # Also output logs to console
+        ]
+    )
+    logging.debug("Logging is set to DEBUG mode.")
+    logging.info(f"Logging to {log_file}.")
+
 if __name__ == "__main__":
     # clear screen
     os.system('cls' if os.name == 'nt' else 'clear')
 
     args = parse_arguments()
+
+    # Configure logging based on provided arguments
+    setup_logging(args.log_file, args.mode)
 
     # Detect and set the active interface cross-platform
     active_iface = SHP_live_networking.find_and_select_active_interface()

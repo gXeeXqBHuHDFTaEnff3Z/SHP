@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Cybersecurity Experiment Automation Script
+SHP Experiment Automation Script
 
 This script orchestrates multiple experiment runs with various parameter
 combinations (initial set and full set). It filters invalid combinations,
@@ -42,6 +42,7 @@ WAIT_BETWEEN_RUNS = 4  # seconds
 
 # Define default static values for server and client parameters not in the experiment domain
 DEFAULT_PARAMS = {
+    "mode": "warning",
     "port": "443",
     "subnet": "10.0.0.0/8",
     "silence_poi": "2",
@@ -86,6 +87,7 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Run cybersecurity experiments with GA optimization.")
     parser.add_argument("--iterations", type=int, default=2, help="Number of GA iterations to run.")
+    parser.add_argument("--timeout", type=int, default=300, help="Number of seconds for iteration timeout.")
     parser.add_argument("--skip_initial", action="store_true", help="Skip the initial parameter set run.")
     parser.add_argument("--skip_full", action="store_true", help="Skip the full parameter set run.")
     parser.add_argument("--ga_population_size", type=int, default=10, help="Population size for the genetic algorithm.")
@@ -103,7 +105,7 @@ def get_initial_parameters() -> List[Dict[str, str]]:
     bitlength_values = [2, 3, 8]
     rounding_values = [0, 2, 4]
     poi_values = ["broadcast_bpf"]
-    inputsource_values = ["ISD", "timestamp"]
+    inputsource_values = ["ISD", "ISPN"]
     subchanneling_values = ["none", "iphash"]
     subchanneling_bits_values = [0, 2, 4]
     ecc_values = ["none"]
@@ -252,7 +254,7 @@ def generate_command(params: Dict[str, str], mode: str) -> List[str]:
     return cmd
 
 
-def run_experiment(params: Dict[str, str], logger: logging.Logger) -> None:
+def run_experiment(params: Dict[str, str], logger: logging.Logger, timeout: int) -> None:
     """
     Run one experiment with given parameters:
      1. Start server
@@ -263,11 +265,12 @@ def run_experiment(params: Dict[str, str], logger: logging.Logger) -> None:
     :param params: Dictionary of parameter values
     :param logger: Logger instance for tracking progress
     """
+    start_time = time.time()
+
     # Start server
     server_cmd = generate_command(params, mode="server")
     logger.info(f"Starting server with parameters: {params}")
     try:
-        #server_process = subprocess.Popen(server_cmd)
         server_process = subprocess.Popen(server_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception as e:
         logger.error(f"Failed to start server process: {e}")
@@ -283,13 +286,38 @@ def run_experiment(params: Dict[str, str], logger: logging.Logger) -> None:
         client_process = subprocess.Popen(client_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception as e:
         logger.error(f"Failed to start client process: {e}")
-        # Terminate server if client fails
         server_process.terminate()
         return
 
-    # Wait for client to finish
-    client_returncode = client_process.wait()
-    logger.info(f"Client finished with return code {client_returncode}")
+    # Wait for client with timeout
+    elapsed = time.time() - start_time
+    remaining = timeout - elapsed
+    try:
+        client_returncode = client_process.wait(timeout=remaining)
+        logger.info(f"Client finished with return code {client_returncode}")
+    except subprocess.TimeoutExpired:
+        logger.error("Client process timeout exceeded")
+        client_process.terminate()
+        server_process.terminate()
+        record_timeout_result(params, logger)
+        return
+
+    # Wait for server with adjusted timeout
+    elapsed = time.time() - start_time
+    remaining = timeout - elapsed
+    if remaining <= 0:
+        logger.error("Timeout expired before waiting for server")
+        server_process.terminate()
+        record_timeout_result(params, logger)
+        return
+    try:
+        server_returncode = server_process.wait(timeout=remaining)
+        logger.info(f"Server finished with return code {server_returncode}")
+    except subprocess.TimeoutExpired:
+        logger.error("Server process timeout exceeded")
+        server_process.terminate()
+        record_timeout_result(params, logger)
+        return
 
     # Optionally wait for server to produce stats
     # Depending on your server script, you might want to wait or
@@ -329,6 +357,22 @@ def already_run(params: Dict[str, str], csv_file: str) -> bool:
 
     return False
 
+def record_timeout_result(params: Dict[str, str], logger: logging.Logger) -> None:
+    result = {
+        "parameters": "{poi}:{inputsource}:{bitlength}b:{rounding_factor}r:{multihashing}m:{ecc}".format(**params),
+        "FITNESS": "-1",
+        "comment": "factory timeout"
+    }
+    file_exists = os.path.exists(STATS_CSV)
+    with open(STATS_CSV, "a", newline="") as csvfile:
+        fieldnames = ["parameters", "FITNESS", "comment"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(result)
+    logger.info("Recorded timeout result for parameters.")
+
+
 # --------------------- Results & GA ---------------------------
 def parse_stats() -> List[Dict[str, str]]:
     """
@@ -351,9 +395,7 @@ def evaluate_fitness(row: Dict[str, str]) -> float:
     """
     Calculate a fitness score from a stats row. This might combine
     'caf', 'avgdistance_all', 'steganographic_bandwidth', etc.
-    The higher the better in this example.
-
-    Adjust this logic to reflect the real performance criteria.
+    The higher the better.
     """
     try:
         # fitness read from stats: CAF must be more than 1, maximize bps * hitrate
@@ -391,21 +433,38 @@ def crossover(parent1: Dict[str, str], parent2: Dict[str, str]) -> Dict[str, str
 def mutate(params: Dict[str, str], mutation_rate: float) -> Dict[str, str]:
     """
     Randomly mutate parameter values based on the given mutation rate.
-    This example picks a random parameter and shifts it.
-    Modify the logic to suit your parameter space.
+    This version mutates any parameter from the full parameter set.
     """
     import random
 
-    if random.random() < mutation_rate:
-        # Example mutation logic for demonstration:
-        # Suppose we mutate 'bitlength' by picking from a small set
-        bitlength_options = [2, 4, 8, 16, 32, 64]
-        current = int(params["bitlength"])
-        new_value = random.choice(bitlength_options)
-        # ensure it's a different value
-        while new_value == current:
-            new_value = random.choice(bitlength_options)
-        params["bitlength"] = str(new_value)
+    full_domain = {
+        "bitlength": ["2", "3", "4", "8", "16", "32", "64"],
+        "rounding_factor": ["0", "2", "4", "6"],
+        "poi": ["broadcast_bpf", "all"],
+        "inputsource": ["ISD", "ICD", "IPD", "ISPN", "timestamp"],
+        "subchanneling": ["none", "baseipd", "iphash", "clockhash"],
+        "subchanneling_bits": ["0", "2", "4", "8"],
+        "ecc": ["none", "hamming", "hamming+", "inline-hamming+"],
+        "multihashing": ["0", "2", "4", "8"]
+    }
+
+    # Iterate over each parameter and possibly mutate it.
+    for key in list(params.keys()):
+        if random.random() < mutation_rate:
+            current = params[key]
+            options = full_domain.get(key, [current])
+            # Choose a new value different from the current one (if possible)
+            if len(options) > 1:
+                new_value = random.choice(options)
+                while new_value == current:
+                    new_value = random.choice(options)
+            else:
+                new_value = current
+            params[key] = new_value
+
+    # Enforce valid combinations: if subchanneling is 'none', subchanneling_bits must be '0'
+    if params.get("subchanneling") == "none":
+        params["subchanneling_bits"] = "0"
 
     return params
 
@@ -438,7 +497,7 @@ def run_genetic_algorithm(
         fitness_score = evaluate_fitness(row)
         # Convert row to param dict
         params = {}
-        # Example columns that match the parameter dict:
+        # columns that need to match the parameter dict:
         for k in ["bitlength", "rounding_factor", "poi", "inputsource",
                   "subchanneling", "subchanneling_bits", "ecc", "multihashing"]:
             if k in row:
@@ -512,9 +571,6 @@ def open_csv_in_excel(csv_file):
 
 # --------------------- Main Flow ------------------------------
 def main():
-    logger = setup_logger()
-    args = parse_args()
-
     # Get the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -523,6 +579,9 @@ def main():
 
     # Print to verify
     print("Current working directory:", os.getcwd())
+
+    logger = setup_logger()
+    args = parse_args()
 
     # 1. Run initial parameter set
     if not args.skip_initial:
@@ -533,7 +592,7 @@ def main():
             if already_run(params, STATS_CSV):
                 logger.info("Combination already exists in stats_server.csv. Skipping.")
                 continue
-            run_experiment(params, logger)
+            run_experiment(params, logger, args.timeout)
 
     # 2. Run full parameter set
     if not args.skip_full:
@@ -544,7 +603,7 @@ def main():
             if already_run(params, STATS_CSV):
                 logger.info("Combination already exists in stats_server.csv. Skipping.")
                 continue
-            run_experiment(params, logger)
+            run_experiment(params, logger, args.timeout)
 
     # 3. GA-based iterative improvement
     for iteration in range(args.iterations):
@@ -569,7 +628,7 @@ def main():
             if already_run(params, STATS_CSV):
                 logger.info("Combination already exists in stats_server.csv. Skipping.")
                 continue
-            run_experiment(params, logger)
+            run_experiment(params, logger, args.timeout)
 
     logger.info("All experiments complete!")
 

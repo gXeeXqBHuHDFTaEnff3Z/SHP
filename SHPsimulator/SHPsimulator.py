@@ -556,7 +556,7 @@ def main():
     parser.add_argument('--silence', type=int, default=0, help='Number of milliseconds PoIs must be apart (= phi or silent interval). Default 0 = disabled.') 
   
     # robustness manipulation parameters
-    parser.add_argument('--simulateCR', action='store_true', default=False, help='When set will also simulate covert reiceiver.')
+    parser.add_argument('--simulateCR', action='store_true', default=False, help='When set will also simulate covert receiver.')
     parser.add_argument('--packetloss', type=int, default=0, help='Percent of PDUs that are lost between CS and CR. Default 0 = disabled. Maximum allowed value is 100.')
     parser.add_argument('--delay', type=int, default=0, help='Milliseconds of delay between CS observing PDU and CR receiving pointer. Default 0 = disabled.')
     parser.add_argument('--delayAdjustmentTerm', type=int, default=0, help='Adjustment Term used to align pointer and PDU timing. Default 0 = disabled.')

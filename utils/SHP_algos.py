@@ -153,12 +153,6 @@ def parse_datapacket(pkt, inputsource, deskew, bitlength, rounding_factor, subch
     # Calculate subchannel if mux is used; Default=0
     subchannel = get_subchannel(pkt, subchanneling, subchanneling_bits, last_packet_time, rounding_factor)
 
-    # if we count packets per subchannel, increment now
-    if (inputsource == 'ISPN'):
-        ispn_counter = last_data_per_subchannel.get(subchannel)
-        ispn_counter = (ispn_counter + 1) if ispn_counter is not None else 0
-        last_data_per_subchannel[subchannel] = ispn_counter
-
     # Calculate source_data per current subchannel
     source_data = get_source_data(pkt, inputsource, subchannel, last_data_per_subchannel, first_timestamp)
 
@@ -183,6 +177,9 @@ def parse_datapacket(pkt, inputsource, deskew, bitlength, rounding_factor, subch
     # update last data to this data
     if (inputsource == 'ISD'): # if we use inter signal timing, NOW is a signal
         last_data_per_subchannel[subchannel] = pkt.time
+    # if we count packets per subchannel, now is new
+    elif (inputsource == 'ISPN'):
+        last_data_per_subchannel[subchannel] = 0
 
     # check the ecc
     if (ecc != 'none'):
@@ -218,7 +215,7 @@ def isMatch(pkt, inputsource, deskew, bitlength, rounding_factor, subchanneling,
     # if we count packets per subchannel, increment now
     if (inputsource == 'ISPN'):
         ispn_counter = last_data_per_subchannel.get(subchannel)
-        ispn_counter = (ispn_counter + 1) if ispn_counter is not None else 0
+        ispn_counter = (ispn_counter + 1) if ispn_counter is not None else 1
         last_data_per_subchannel[subchannel] = ispn_counter
 
     # Calculate source_data per current subchannel

@@ -41,20 +41,6 @@ secret_message_sent = False
 # Get the absolute path of the current script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Build the full path for the log file
-log_file = os.path.join(script_dir, 'SHPclient.log')
-
-# Configure logging for error tracking
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    handlers=[
-        #logging.FileHandler(log_file),  # Write to file
-        logging.StreamHandler()         # Also write to console
-    ]
-)
-
 # Define file for storing captured packets
 packet_pcap_file = os.path.join(script_dir, 'SHPclient.pcapng')
 
@@ -65,6 +51,22 @@ if not os.path.exists(packet_pcap_file):
 # Parse command-line arguments
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Packet capture and filtering based on POI, port, and subnet.")
+    
+    # log level
+    parser.add_argument(
+        '--mode',
+        type=str,
+        default='info',
+        choices=['debug', 'info', 'warning', 'error'],
+        help="Set the logging mode. 'debug' for DEBUG level logging, 'info' for INFO level."
+    )
+    parser.add_argument(
+        '--log_file',
+        type=str,
+        default='SHPclient.log',
+        help="Path to the log file."
+    )
+
     # arguments for poi filtering
     parser.add_argument('--poi', type=str, default="broadcast_bpf", help="Packet of interest type.")  # all, port, subnet, broadcast_domain, broadcast_bpf
     parser.add_argument('--silence_poi', type=args_check_silence, default=2, help='Number of milliseconds any two PoI need to be apart (= phi or POI silence interval). Default 0 = disabled. Max 1000ms.')
@@ -249,7 +251,7 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
         
         # observe CC minimum silence delta
         if (packet.time - last_cc_time < (silence_cc / 1000)):
-            #logging.info(f"(silence: CC message in CC silence interval ({(packet.time - last_cc_time)}s). Ignoring it as POI.)")
+            logging.debug(f"(silence: CC message in CC silence interval ({(packet.time - last_cc_time)}s). Ignoring it as POI.)")
             counter_poi_ignored_because_silence += 1
             last_cc_time = packet.time
             return
@@ -257,7 +259,7 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
         last_cc_time = packet.time
 
         # we ignore CC as POI
-        #logging.info(f"(Observed CC message [{bits3}][{bits4}]@{packet.time}. Ignoring it as POI.)")
+        logging.debug(f"(Observed CC message [{bits3}][{bits4}]@{packet.time}. Ignoring it as POI.)")
         return
 
     # data channel POI
@@ -267,7 +269,7 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
     counter_poi_ignored_because_silence += count_poi_in_silence
     if (count_poi_in_silence > 0):
         delta = packet.time - last_cc_time
-        #logging.info(f"(silence: data channel POI too close to each other with delta: {delta*1000} < {silence_poi} ). Ignoring it as POI.)")
+        logging.debug(f"(silence: data channel POI too close to each other with delta: {delta*1000} < {silence_poi} ). Ignoring it as POI.)")
         return
 
     # still a poi after removing CC and silenced POI?
@@ -279,7 +281,7 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
 
         counter_poi_valid_received += 1  # Increment POI packets received
 
-        # Check if packet matches the data we want to send
+        # Check if packet matches the data we want to send. this also updates matching counters.
         match, source_data, message_bits, deskewed_bits, subchannel, checking_index, multihash_count = SHP_algos.isMatch(
             packet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, 
             checksum_length, secret_message_bitstring, index, timestamp_start, last_data_per_subchannel, last_poi_time, send_chunks)
@@ -297,7 +299,7 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
             # send data pointer 
             SHP_live_networking.send_arp_request(arp_sender, multihash_count, f"{checksum}01")
 
-            #logging.info(f'### MATCH ###@{packet.time} | index {checking_index} | last data {last_data_per_subchannel} | multi:{multihash_count} | source:{source_data} -> msg:{message_bits} | send pointer with watchdog [{multihash_count}:{checksum}]')
+            logging.info(f'MATCH@{packet.time} | index {checking_index} | last data {last_data_per_subchannel} | multi:{multihash_count} | source:{source_data} -> msg:{message_bits} | send pointer with watchdog [{multihash_count}:{checksum}]')
 
             counter_matches += 1
             counter_secret_bits_transmitted += bitlength  # Update secret bits transmitted
@@ -331,15 +333,6 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
 
         last_poi_time = packet.time
         list_last_data_pois.insert(0, packet)
-
-        # update last data that uses each packet
-        if (inputsource == 'IPD'):
-            last_data_per_subchannel[subchannel] = packet.time
-        elif (inputsource == 'ISPN'):
-            if last_data_per_subchannel:
-                last_data_per_subchannel[subchannel] += 1
-            else:
-                last_data_per_subchannel[subchannel] = 0
 
         return
 
@@ -439,7 +432,7 @@ def write_statistics(poi, inputsource, bitlength, rounding_factor, subchanneling
         pass
     
     with open(file_path, mode='a', newline='') as file:
-        writer = csv.writer(file, delimiter=';')
+        writer = csv.writer(file, delimiter=',')
         if not file_exists:
             writer.writerow(stats.keys())  # Write headers only if file does not exist
         writer.writerow(stats.values())  # Write values
@@ -468,11 +461,45 @@ def start_shpclient(arp_sender, poi, silence_poi, silence_cc, port, subnet, inpu
         stacktrace = traceback.format_exc()
         logging.error(f"Failed to start SHPclient: {e}: {stacktrace}")
 
+def setup_logging(log_file, mode):
+    """
+    Configures logging.
+
+    Args:
+        log_file (str): Path to the log file.
+        mode (str): Logging mode; 'debug' sets logging level to DEBUG,
+                    otherwise defaults to INFO.
+    """
+    # Set log level based on mode argument
+    if (mode.lower() == 'debug'):
+        log_level = logging.DEBUG
+    elif (mode.lower() == 'info'):
+        log_level = logging.INFO
+    elif (mode.lower() == 'warning'):
+        log_level = logging.WARNING
+    elif (mode.lower() == 'error'):
+        log_level = logging.ERROR 
+
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(log_file),  # Write logs to file
+            logging.StreamHandler()         # Also output logs to console
+        ]
+    )
+    logging.debug("Logging is set to DEBUG mode.")
+    logging.info(f"Logging to {log_file}.")
+
 if __name__ == "__main__":
     # clear screen
     os.system('cls' if os.name == 'nt' else 'clear')
     
     args = parse_arguments()
+
+    # Configure logging based on provided arguments
+    setup_logging(args.log_file, args.mode)
 
     # Detect and set the active interface cross-platform
     active_iface = SHP_live_networking.find_and_select_active_interface()
