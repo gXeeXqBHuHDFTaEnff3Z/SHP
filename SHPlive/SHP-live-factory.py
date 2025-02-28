@@ -38,11 +38,11 @@ STATS_CSV = "stats_server.csv"
 LOG_FILE = "SHP-live-factory.log"
 ROTATING_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 ROTATING_LOG_BACKUP_COUNT = 2
-WAIT_BETWEEN_RUNS = 4  # seconds
+WAIT_BETWEEN_RUNS = 5  # seconds
 
 # Define default static values for server and client parameters not in the experiment domain
 DEFAULT_PARAMS = {
-    "mode": "warning",
+    "mode": "error",
     "port": "443",
     "subnet": "10.0.0.0/8",
     "silence_poi": "2",
@@ -154,7 +154,7 @@ def get_full_parameters() -> List[Dict[str, str]]:
     inputsource_values = ["ISD", "ICD", "IPD", "ISPN", "timestamp"]
     subchanneling_values = ["none", "baseipd", "iphash", "clockhash"]
     subchanneling_bits_values = [0, 2, 4, 8]
-    ecc_values = ["none", "hamming", "hamming+", "inline-hamming+"], 
+    ecc_values = ["none", "hamming", "hamming+", "inline-hamming+"]
     multihashing_values = [0, 2, 4, 8]
 
     param_combinations = list(itertools.product(
@@ -212,6 +212,7 @@ def generate_command(params: Dict[str, str], mode: str) -> List[str]:
     # Map param dict to server script arguments
     if mode == "server":
         cmd += [
+            f"--mode={params['mode']}",
             f"--poi={params['poi']}",
             f"--silence_poi={params['silence_poi']}",
             f"--silence_cc={params['silence_cc']}",
@@ -229,6 +230,7 @@ def generate_command(params: Dict[str, str], mode: str) -> List[str]:
     else:
         # Client-specific parameters
         cmd += [
+            f"--mode={params['mode']}",            
             f"--poi={params['poi']}",
             f"--silence_poi={params['silence_poi']}",
             f"--silence_cc={params['silence_cc']}",
@@ -271,7 +273,8 @@ def run_experiment(params: Dict[str, str], logger: logging.Logger, timeout: int)
     server_cmd = generate_command(params, mode="server")
     logger.info(f"Starting server with parameters: {params}")
     try:
-        server_process = subprocess.Popen(server_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        #server_process = subprocess.Popen(server_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        server_process = subprocess.Popen(server_cmd)
     except Exception as e:
         logger.error(f"Failed to start server process: {e}")
         return
@@ -283,7 +286,8 @@ def run_experiment(params: Dict[str, str], logger: logging.Logger, timeout: int)
     client_cmd = generate_command(params, mode="client")
     logger.info("Starting client...")
     try:
-        client_process = subprocess.Popen(client_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        #client_process = subprocess.Popen(client_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        client_process = subprocess.Popen(client_cmd)
     except Exception as e:
         logger.error(f"Failed to start client process: {e}")
         server_process.terminate()

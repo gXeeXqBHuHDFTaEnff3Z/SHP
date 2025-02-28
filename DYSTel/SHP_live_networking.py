@@ -7,7 +7,7 @@ import socket
 import traceback
 from scapy.all import sniff, Ether, ARP, sendp, conf, show_interfaces
 
-STATIC_IP_CC             = '10.1.0.0'
+STATIC_IP_CC             = '127.55.0.0'
 STATIC_BITSTRING_INIT    = '00000000'
 STATIC_BITSTRING_POINTER = '00000001'
 STATIC_BITSTRING_RETRY   = '00000010'

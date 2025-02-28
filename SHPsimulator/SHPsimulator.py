@@ -13,8 +13,8 @@ import glob
 from scipy.stats import boxcox # for demux
 import numpy as np
 from numpy import log1p, power # for demux
-import SHP_ecc # our ECC module
-import SHP_algos # our SHP algorithms
+import SHP_ecc as SHP_ecc # our ECC module
+import SHP_algos as SHP_algos # our SHP algorithms
 
 def setup_logger():
     """
@@ -287,8 +287,8 @@ def process_packet(pkt, pcap_writer, writer, poi, port, inputsource, deskew, sub
         # if we get an unhandled exception for a PDU we stop this script
         log_error(f'Exception while checking PDU with values msg_bits {message_bits}, deskewed_bits {deskewed_bits}, index {index}, checksum_length {checksum_length}', e, pkt)
         exit(2607)
-        
-    return index, last_packet_time, counter_poi, match_number, match_cycle, send_chunks, last_data_per_subchannel, cr_received_pdus, cr_correctly_matched_pdus # Return the last packet of interest time unchanged if the current packet does not meet criteria
+       
+    return index, last_packet_time, last_poi_time, counter_poi, match_number, match_cycle, send_chunks, last_data_per_subchannel, cr_received_pdus, cr_correctly_matched_pdus # Return the last packet of interest time unchanged if the current packet does not meet criteria
 
 def process_pcap_files(pcap_files, capfolder, subnet, poi, inputsource, deskew, subchanneling, subchanneling_bits, output_folder, secret_file, rounding_factor, bitlength, multihashing, ooodelivery, ecc, checksum_length, comment_field, batching, packetloss_percentage, packetdelay, delayAdjustmentTerm, packetjitter, silence, simulateCR, saveWithPointer, verbose, port=None):
     # init variables
@@ -526,7 +526,7 @@ def find_pcap_files(folder):
     
 def main():
     # script version
-    version_number = '10.0'
+    version_number = '10.1'
     version = 'V' + version_number
     
     # Get the directory where the script is located
@@ -538,9 +538,9 @@ def main():
     # parse command line arguments
     parser = argparse.ArgumentParser(description='Analyze pcap files for SHP covert channel communications.')
     # SHP parameterization
-    parser.add_argument('--capfolder', default='pcap-test', help='Folder containing pcap files.')
-    parser.add_argument('poi', choices=['all', 'subnet', 'broadcast_domain', 'port'], help='Defines PDUs of interest (POI).')
-    parser.add_argument('subnet', help='Subnet address in CIDR notation, e.g. 10.0.0.0/24.')
+    parser.add_argument('--capfolder', default='../_pcaps/test', help='Folder containing pcap files.')
+    parser.add_argument('--poi', choices=['all', 'subnet', 'broadcast_domain', 'port'], default='broadcast_domain', help='Defines PDUs of interest (POI).')
+    parser.add_argument('--subnet', default='10.0.0.0/8', help='Subnet address in CIDR notation, e.g. 10.0.0.0/24.')
     parser.add_argument('--port', type=int, default=80, help='TCP/UDP port number for the port poi mode.') 
     parser.add_argument('--inputsource', choices=['IPD', 'ISD', 'ISPN', 'ICD', 'timestamp', 'payload', 'tcp_seq'], default='IPD', help='Defines source of the pointer data. Default=IPD.') # IPD=inter packet delay; ISD=inter signal delay; ISPN=inter signal packet number
     parser.add_argument('--deskew', choices=['none', 'sha3', 'md5', 'log', 'power'], default='sha3', help='Defines deskew transformation.')
@@ -549,14 +549,14 @@ def main():
     parser.add_argument('--subchanneling', choices=['none', 'baseipd', 'iphash', 'clock', 'clockhash'], default='none', help='Defines how subchannel split is calculated.')
     parser.add_argument('--subchanneling_bits', type=int, default=0, help='Number of bits used for multiplex subchannel number. Default=0')
     parser.add_argument('--outfolder', help='Output folder name. Defaults to current date.')
-    parser.add_argument('--secret', default='secret_udhr.txt', help='File containing the secret message.')
+    parser.add_argument('--secret', default='secret_message_long.txt', help='File containing the secret message.')
     parser.add_argument('--ecc', choices=['none', 'hamming', 'hamming+', 'inline-hamming+'], default='none', help='Type of error correction code. Allows matching near miss sequences. Default none.')
     parser.add_argument('--multihashing', type=int, default=0, help='Number of bits used to mark how many hash iterations are needed to determine the message chunk. Default 0 = disabled. ')
     parser.add_argument('--ooodelivery', type=int, default=0, help='Number of bits used to mark the future message chunk, determining the number of future chunks to be checked. Default 0 = disabled. Maximum allowed value is 8.') # assumes CR supports packet reordering 
     parser.add_argument('--silence', type=int, default=0, help='Number of milliseconds PoIs must be apart (= phi or silent interval). Default 0 = disabled.') 
   
     # robustness manipulation parameters
-    parser.add_argument('--simulateCR', action='store_true', default=False, help='When set will also simulate covert receiver.')
+    parser.add_argument('--simulateCR', action='store_true', default=True, help='When set will also simulate covert receiver.')
     parser.add_argument('--packetloss', type=int, default=0, help='Percent of PDUs that are lost between CS and CR. Default 0 = disabled. Maximum allowed value is 100.')
     parser.add_argument('--delay', type=int, default=0, help='Milliseconds of delay between CS observing PDU and CR receiving pointer. Default 0 = disabled.')
     parser.add_argument('--delayAdjustmentTerm', type=int, default=0, help='Adjustment Term used to align pointer and PDU timing. Default 0 = disabled.')

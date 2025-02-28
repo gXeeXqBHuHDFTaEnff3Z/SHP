@@ -1,0 +1,4 @@
+uuid,settings,start,duration,packets,poi_critical_fraction,matches,avg_distance,bandwidth_per_sec,stego_bandwidth
+b65e7d93-0d35-4f97-b799-de205cbbae88,"1 chars, trivial, mode: cr",1740696919.2874992,51.49130821228027,0,0,7,0.0,1.0875621914504872,0
+9ff57ac5-c314-483f-a6b7-58a6c683b98b,"1 chars, trivial, mode: cr",1740697053.8040426,31646.076673984528,12,0,12,1.0,0.0030335513937157104,8.0
+e8d455fa-a9d7-4157-869e-9ccb7e2b03c4,"1 chars, trivial, mode: cr",1740729098.8411458,19572.94603919983,12,0,12,1.0,0.00490472920160999,8.0

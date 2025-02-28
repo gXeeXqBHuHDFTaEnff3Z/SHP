@@ -275,7 +275,7 @@ def get_source_data(pkt, inputsource, subchannel, last_data_per_subchannel, firs
     """Calculates the network source data used as a base for deskewing and comparison.""" 
     last_data = last_data_per_subchannel.get(subchannel)
 
-    #print(f"[DEBG] get_source_data: timestamp {pkt.time} | source: {inputsource} | channel {subchannel} | last {last_data_per_subchannel} | first {first_timestamp}")
+    #print(f"[DEBG] get_source_data: packet@{pkt.time} | source: {inputsource} | channel {subchannel} | last {last_data_per_subchannel} | first {first_timestamp}")
     
     if (inputsource == 'IPD'): # inter packet delay; last data is previous PDU time
         return (pkt.time - last_data) if last_data is not None else 0
@@ -303,7 +303,7 @@ def get_subchannel(pkt, subchanneling, subchanneling_bits, last_packet_time, rou
     subchannel = 0
     
     if (subchanneling == 'none'):
-        # no subchannels. cipd is just the rounded base ipd.
+        # no subchannels. subchannel is just 0.
         return subchannel
     elif subchanneling == 'baseipd':
         # subchannels by first bits of rounded and hashed baseipd
@@ -318,6 +318,8 @@ def get_subchannel(pkt, subchanneling, subchanneling_bits, last_packet_time, rou
             if IP in pkt:
                 result, _ = sha3_hash_bits(pkt[IP].src, subchanneling_bits)
                 return int(result, 2)
+            else:
+                return 0
         except Exception as e:
             # Handles cases where the packet might be malformed or lacks expected data
             print("[ERR!] PDU used for iphash subchannel determination is malformed or missing expected data.")
@@ -716,6 +718,62 @@ def create_pointer(src_ip, src_mac, target_ip):
     # EtherType 0x0806 is for ARP
     eth_frame = Ether(dst="ff:ff:ff:ff:ff:ff", src=src_mac, type=0x0806) / arp_request
     return eth_frame
+
+def findLastPOI(pointer, rtt, list_last_poi):
+    """
+    Given a pointer with a timestamp, a round-trip time (rtt), and a list of packets
+    (each having a 'timestamp' attribute) sorted in descending order (most recent first),
+    find and return the packet whose timestamp is closest to:
+    
+         target = pointer.timestamp - (rtt/2)
+    """
+
+    if not pointer:
+        return None
+        
+    target = pointer.time - (rtt / 2.0)
+
+    if not list_last_poi:
+        return None  # or raise an exception if an empty list is not allowed
+
+    # Check if the target is outside the range of our list:
+    if target >= list_last_poi[0].time:
+        return list_last_poi[0]
+    if target <= list_last_poi[-1].time:
+        return list_last_poi[-1]
+
+    # Binary search in a descending sorted list:
+    lo = 0
+    hi = len(list_last_poi) - 1
+
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        ts_mid = list_last_poi[mid].time
+        if ts_mid == target:
+            return list_last_poi[mid]
+        # Because the list is sorted in descending order:
+        if ts_mid > target:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+
+    # After the loop, lo is the insertion point and hi == lo - 1.
+    # We now have two candidates: one at hi (more recent than target) and one at lo (older than target).
+    candidate_hi = list_last_poi[hi] if hi >= 0 else None
+    candidate_lo = list_last_poi[lo] if lo < len(list_last_poi) else None
+
+    # In our setup both candidate_hi and candidate_lo should be valid,
+    # but we check for safety.
+    if candidate_hi is None:
+        return candidate_lo
+    if candidate_lo is None:
+        return candidate_hi
+
+    if abs(candidate_hi.time - target) <= abs(candidate_lo.time - target):
+        return candidate_hi
+    else:
+        return candidate_lo
+
 
 def flush_poi_list(pkt, list_poi, silence):
     """

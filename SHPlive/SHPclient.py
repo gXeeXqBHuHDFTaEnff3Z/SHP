@@ -17,7 +17,22 @@ import utils.SHP_ecc as SHP_ecc
 import utils.SHP_live_networking as SHP_live_networking
 import traceback
 
+# options
+DEFAULT_MODE    = 'info'
+DEFAULT_POI     = 'broadcast_bpf'
+DEFAULT_SILENCE = 0
+DEFAULT_INPUTSOURCE = 'ICD'
+DEFAULT_SUBCHANNELING = 'none'
+DEFAULT_SUB_BITS  = 0
+DEFAULT_BITLENGTH = 8
+DEFAULT_ROUNDING  = 0
+DEFAULT_REHASHING = 0
+DEFAULT_ECC       = 'none'
+DEFAULT_SECRET = 'secret_message_short.txt'
+DEFAULT_SAVEPCAP = False
+
 # global variables for sending
+started = False # keeps track if we send the START message
 index = 0
 last_data_per_subchannel = {}
 last_poi_time = None
@@ -56,7 +71,7 @@ def parse_arguments():
     parser.add_argument(
         '--mode',
         type=str,
-        default='info',
+        default=DEFAULT_MODE,
         choices=['debug', 'info', 'warning', 'error'],
         help="Set the logging mode. 'debug' for DEBUG level logging, 'info' for INFO level."
     )
@@ -68,27 +83,27 @@ def parse_arguments():
     )
 
     # arguments for poi filtering
-    parser.add_argument('--poi', type=str, default="broadcast_bpf", help="Packet of interest type.")  # all, port, subnet, broadcast_domain, broadcast_bpf
-    parser.add_argument('--silence_poi', type=args_check_silence, default=2, help='Number of milliseconds any two PoI need to be apart (= phi or POI silence interval). Default 0 = disabled. Max 1000ms.')
-    parser.add_argument('--silence_cc', type=args_check_silence, default=2, help='Number of milliseconds any two CC messages need to be apart (= d or CC silence interval). Default 0 = disabled. Max 1000ms.')
+    parser.add_argument('--poi', type=str, default=DEFAULT_POI, help="Packet of interest type.")  # all, port, subnet, broadcast_domain, broadcast_bpf
+    parser.add_argument('--silence_poi', type=args_check_silence, default=DEFAULT_SILENCE, help='Number of milliseconds any two PoI need to be apart (= phi or POI silence interval). Default 0 = disabled. Max 1000ms.')
+    parser.add_argument('--silence_cc', type=args_check_silence, default=DEFAULT_SILENCE, help='Number of milliseconds any two CC messages need to be apart (= d or CC silence interval). Default 0 = disabled. Max 1000ms.')
     parser.add_argument('--port', type=int, choices=range(0, 65536), default=443, help="Port number for POI (0-65535).")
     parser.add_argument('--subnet', type=str, default="10.0.0.0/8", help="Subnet for POI function (e.g., '192.168.1.0/24').")
 
     # arguments for SHP algorithm
-    parser.add_argument('--inputsource', choices=['IPD', 'ISD', 'ISPN', 'ICD', 'timestamp', 'payload', 'tcp_seq'], default='ISD', help='Defines source of the pointer data. Default=ISD.') # IPD=inter packet delay; ISD=inter signal delay; ISPN=inter signal packet number
+    parser.add_argument('--inputsource', choices=['IPD', 'ISD', 'ISPN', 'ICD', 'timestamp', 'payload', 'tcp_seq'], default=DEFAULT_INPUTSOURCE, help='Defines source of the pointer data. Default=ISD.') # IPD=inter packet delay; ISD=inter signal delay; ISPN=inter signal packet number
     parser.add_argument('--deskew', choices=['none', 'sha3', 'md5', 'log', 'power'], default='sha3', help='Defines deskew transformation.')
-    parser.add_argument('--rounding_factor', type=int, default=2, help='Rounding factor.')
-    parser.add_argument('--bitlength', type=int, default=3, help='Number of bits for hash and message comparison.') # basic chest length
-    parser.add_argument('--subchanneling', choices=['none', 'baseipd', 'iphash', 'clock', 'clockhash'], default='none', help='Defines how subchannel split is calculated.')
-    parser.add_argument('--subchanneling_bits', type=int, default=0, help='Number of bits used for multiplex subchannel number. Default=0')
-    parser.add_argument('--ecc', choices=['none', 'hamming', 'hamming+', 'inline-hamming+'], default='none', help='Type of error correction code. Allows matching near miss sequences. Default none.')
-    parser.add_argument('--multihashing', type=args_check_multihashing, default=2, help='Number of bits used to mark how many hash iterations are needed to determine the message chunk. Default 0 = disabled. ')
+    parser.add_argument('--rounding_factor', type=int, default=DEFAULT_ROUNDING, help='Rounding factor.')
+    parser.add_argument('--bitlength', type=int, default=DEFAULT_BITLENGTH, help='Number of bits for hash and message comparison.') # basic chest length
+    parser.add_argument('--subchanneling', choices=['none', 'baseipd', 'iphash', 'clock', 'clockhash'], default=DEFAULT_SUBCHANNELING, help='Defines how subchannel split is calculated.')
+    parser.add_argument('--subchanneling_bits', type=int, default=DEFAULT_SUB_BITS, help='Number of bits used for multiplex subchannel number. Default=0')
+    parser.add_argument('--ecc', choices=['none', 'hamming', 'hamming+', 'inline-hamming+'], default=DEFAULT_ECC, help='Type of error correction code. Allows matching near miss sequences. Default none.')
+    parser.add_argument('--multihashing', type=args_check_multihashing, default=DEFAULT_REHASHING, help='Number of bits used to mark how many hash iterations are needed to determine the message chunk. Default 0 = disabled. ')
     parser.add_argument('--ooodelivery', type=int, default=0, help='Number of bits used to mark the future message chunk, determining the number of future chunks to be checked. Default 0 = disabled. Maximum allowed value is 8.') # assumes CR supports packet reordering 
 
-    parser.add_argument('--path_secret', type=str, default="secret_message_short.txt", help='File path containing the secret message.')
+    parser.add_argument('--path_secret', type=str, default=DEFAULT_SECRET, help='File path containing the secret message.')
 
     # argument for saving PCAPs
-    parser.add_argument("--savepcap", action="store_true", default=False, help="Enable savepcap mode.")
+    parser.add_argument("--savepcap", action="store_true", default=DEFAULT_SAVEPCAP, help="Enable savepcap mode.")
     
     return parser.parse_args()
 
@@ -195,6 +210,7 @@ def capture_packets(poi, silence_poi, silence_cc, port, subnet, inputsource, des
 
 # Process Packet: Filter and Log to File
 def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, checksum_length, secret_message_bitstring, savepcap):
+    global started
     global index
     global timestamp_start
     global last_data_per_subchannel
@@ -228,8 +244,9 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
     if not isPOI:
         return
 
-    #display_poi_info(packet, True)
-
+     # -> its a valid POI   
+    logging.debug(f'{packet.time} POI')
+    
     # might be a covert channel message. 
     isCovert, bits3, bits4 = SHP_live_networking.is_covert_pointer(packet, SHP_live_networking.STATIC_IP_CC)
 
@@ -245,13 +262,13 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
             if (inputsource == 'ISPN'):
                 last_data_per_subchannel[0] = 0
 
-            logging.warning(f"Received retry [{bits3}:{bits4}]. Decreasing index counter to {index}. Last data: {last_data_per_subchannel}")
+            logging.warning(f"{packet.time} GOT RETRY [{bits3}:{bits4}]. Decreasing index to {index}. Last data: {last_data_per_subchannel}")
             time.sleep(0.1)  # Sleeps for 100 milliseconds
             return
         
         # observe CC minimum silence delta
         if (packet.time - last_cc_time < (silence_cc / 1000)):
-            logging.debug(f"(silence: CC message in CC silence interval ({(packet.time - last_cc_time)}s). Ignoring it as POI.)")
+            logging.debug(f"{packet.time} (silence: CC message in CC silence interval ({(packet.time - last_cc_time)}s). Ignoring it as POI.)")
             counter_poi_ignored_because_silence += 1
             last_cc_time = packet.time
             return
@@ -259,7 +276,7 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
         last_cc_time = packet.time
 
         # we ignore CC as POI
-        logging.debug(f"(Observed CC message [{bits3}][{bits4}]@{packet.time}. Ignoring it as POI.)")
+        logging.debug(f"{packet.time} (Observed CC message [{bits3}][{bits4}]. Ignoring it as POI.)")
         return
 
     # data channel POI
@@ -269,9 +286,17 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
     counter_poi_ignored_because_silence += count_poi_in_silence
     if (count_poi_in_silence > 0):
         delta = packet.time - last_cc_time
-        logging.debug(f"(silence: data channel POI too close to each other with delta: {delta*1000} < {silence_poi} ). Ignoring it as POI.)")
+        logging.debug(f"{packet.time} (Silence: data channel POI too close to each other with delta: {delta*1000} < {silence_poi} ). Ignoring it as POI.)")
         return
 
+    # check if we started the connection
+    if not started:
+        started = True
+        SHP_live_networking.send_arp_request(arp_sender, SHP_live_networking.STATIC_BITSTRING_INIT, SHP_live_networking.STATIC_BITSTRING_INIT)
+        timestamp_start = round(packet.time, rounding_factor)
+        logging.info(f"{packet.time} CC START by ARP@[{str(timestamp_start)}]")
+        return
+    
     # still a poi after removing CC and silenced POI?
     if isPOI:
 
@@ -299,7 +324,7 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
             # send data pointer 
             SHP_live_networking.send_arp_request(arp_sender, multihash_count, f"{checksum}01")
 
-            logging.info(f'MATCH@{packet.time} | index {checking_index} | last data {last_data_per_subchannel} | multi:{multihash_count} | source:{source_data} -> msg:{message_bits} | send pointer with watchdog [{multihash_count}:{checksum}]')
+            logging.info(f'{packet.time} MATCH | source:{source_data} -> msg:{message_bits}| poi@{packet.time} | index {checking_index} | last data {last_data_per_subchannel} | multi:{multihash_count} | send pointer with watchdog [{multihash_count}:{checksum}]')
 
             counter_matches += 1
             counter_secret_bits_transmitted += bitlength  # Update secret bits transmitted
@@ -329,43 +354,12 @@ def process_packet(packet, poi, silence_poi, silence_cc, port, subnet, inputsour
 
             if secret_message_sent:
                 stop_sniffing = True
-                logging.info("Secret message has been fully sent, shutting down.")
+                logging.info(f"{packet.time} Secret message has been fully sent, shutting down.")
 
         last_poi_time = packet.time
         list_last_data_pois.insert(0, packet)
 
         return
-
-# Display POI Packet Info on Command Line
-def display_poi_info(packet, poi):
-    try:
-        # Define the fixed lengths for MAC and IP addresses
-        MAC_LENGTH = 17  # Standard MAC address length in format 'XX:XX:XX:XX:XX:XX'
-        IP_LENGTH = 15   # Maximum length of IPv4 address in dotted-decimal notation '255.255.255.255'
-
-        # Process addresses and pad them to LENGTH
-        mac_src = packet.src.ljust(MAC_LENGTH)
-        mac_dst = packet.dst.ljust(MAC_LENGTH)
-        ip_src = (packet["IP"].src if packet.haslayer("IP") else "N/A").ljust(IP_LENGTH)
-        ip_dst = (packet["IP"].dst if packet.haslayer("IP") else "N/A").ljust(IP_LENGTH)
-
-        packet_length = len(packet)
-
-        # Determine packet type
-        packet_type = ""
-        if packet.haslayer("ARP"):
-            packet_type = "ARP"
-        elif packet.haslayer("IP") and packet["IP"].dst == "255.255.255.255":
-            packet_type = "IPv4_BROADCAST"
-        elif packet.haslayer("IPv6") and packet["IPv6"].dst == "ff02::1":
-            packet_type = "IPv6_BROADCAST"
-        elif mac_dst == "ff:ff:ff:ff:ff:ff":
-            packet_type = "ETH_BROADCAST"
-
-        logging.info(f"POI: {poi} | Matches: ({counter_matches}/{counter_poi_valid_received}) | @{packet.time} | MAC: {mac_src} -> {mac_dst} | IP: {ip_src} -> {ip_dst} | Type: {packet_type if packet_type else 'N/A'} | {packet.summary()}")
-    except Exception as e:
-        stacktrace = traceback.format_exc()
-        logging.error(f"can not display packet: %s", e, stacktrace)
 
 # Write Packet to PCAPNG File
 def write_packet_to_file(packet):
@@ -446,11 +440,6 @@ def start_shpclient(arp_sender, poi, silence_poi, silence_cc, port, subnet, inpu
     try:
         logging.info(f"Starting SHPclient (= covert sender) with parameters: poi={poi}, inputsource={inputsource}, bitlength={bitlength}, multihashing={multihashing}, ecc={ecc}, savepcap={savepcap}")
 
-        # init connection
-        SHP_live_networking.send_arp_request(arp_sender, SHP_live_networking.STATIC_BITSTRING_INIT, SHP_live_networking.STATIC_BITSTRING_INIT)
-        timestamp_start = time.time()
-        logging.info("Connection init by ARP at " + str(timestamp_start))
-
         # start thread for packet capture
         capture_thread = threading.Thread(target=capture_packets, args=(poi, silence_poi, silence_cc, port, subnet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, secret, savepcap))
         capture_thread.daemon = True  # Ensures thread exits when main program exits
@@ -482,7 +471,8 @@ def setup_logging(log_file, mode):
 
     logging.basicConfig(
         level=log_level,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        #format='%(asctime)s - %(levelname)s - %(message)s',
+        format='%(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
         handlers=[
             logging.FileHandler(log_file),  # Write logs to file
@@ -494,7 +484,7 @@ def setup_logging(log_file, mode):
 
 if __name__ == "__main__":
     # clear screen
-    os.system('cls' if os.name == 'nt' else 'clear')
+    #os.system('cls' if os.name == 'nt' else 'clear')
     
     args = parse_arguments()
 
