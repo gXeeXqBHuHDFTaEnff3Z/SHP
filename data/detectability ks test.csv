@@ -1,0 +1,4 @@
+,mean_D,std_D,mean_p_value
+ks-test-non-non,0.080292621,0.107575697,2.31E-05
+ks-test-shp-shp,0.080135365,0.107401398,2.56E-05
+ks-test-shp-non,0.080319048,0.107440435,4.42E-05

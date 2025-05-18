@@ -1,0 +1,28 @@
+[2025-04-27 22:02:36,446] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:03:53,461] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:03:53,462] INFO: Analyzing folder: ../_pcaps/base | Files found: 10
+[2025-04-27 22:07:03,981] INFO: Analyzing folder: ../_pcaps/SHP | Files found: 10
+[2025-04-27 22:11:13,375] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:11:13,375] INFO: Analyzing folder: ../_pcaps/base | Files found: 10
+[2025-04-27 22:11:18,067] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:11:18,068] INFO: Analyzing folder: ../_pcaps/base | Files found: 10
+[2025-04-27 22:13:28,806] INFO: Analyzing folder: ../_pcaps/SHP | Files found: 10
+[2025-04-27 22:13:29,207] INFO: Results saved to results_scores.csv
+[2025-04-27 22:13:29,208] WARNING: ROC Curve requires exactly two distinct folders. Skipping ROC generation.
+[2025-04-27 22:16:58,831] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:16:58,832] INFO: Analyzing folder: ../_pcaps/base | Files found: 10
+[2025-04-27 22:19:35,456] INFO: Analyzing folder: ../_pcaps/SHP | Files found: 10
+[2025-04-27 22:19:35,648] INFO: Results saved to results_scores.csv
+[2025-04-27 22:19:35,649] WARNING: ROC Curve requires exactly two distinct folders. Skipping ROC generation.
+[2025-04-27 22:19:55,083] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:19:55,084] INFO: Analyzing folder: ../_pcaps/base | Files found: 10
+[2025-04-27 22:20:09,156] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:20:09,157] INFO: Analyzing folder: ../_pcaps/base | Files found: 10
+[2025-04-27 22:25:52,399] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:25:52,400] INFO: Analyzing folder: ../_pcaps/base | Files found: 10
+[2025-04-27 22:28:19,267] INFO: Analyzing folder: ../_pcaps/SHP | Files found: 10
+[2025-04-27 22:29:09,194] INFO: Starting PCAP Compressibility Analysis
+[2025-04-27 22:29:09,194] INFO: Analyzing folder: ../_pcaps/base | Files found: 10
+[2025-04-27 22:33:13,802] INFO: Analyzing folder: ../_pcaps/SHP | Files found: 10
+[2025-04-27 22:33:13,991] INFO: Results saved to results_scores.csv
+[2025-04-27 22:33:13,992] WARNING: ROC Curve requires exactly two distinct folders. Skipping ROC generation.

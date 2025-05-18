@@ -39,16 +39,17 @@ LOG_FILE = "SHP-live-factory.log"
 ROTATING_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 ROTATING_LOG_BACKUP_COUNT = 2
 WAIT_BETWEEN_RUNS = 5  # seconds
+DEFAULT_TIMEOUT = 360  # seconds (360 = 6 minutes)
 
 # Define default static values for server and client parameters not in the experiment domain
 DEFAULT_PARAMS = {
-    "mode": "error",
+    "reference": "last_poi",
     "port": "443",
     "subnet": "10.0.0.0/8",
     "silence_poi": "2",
     "silence_cc": "2",
     "deskew": "sha3",
-    "path_secret": "secret_message_short.txt",
+    "path_secret": "secret_message_medium.txt",
     "savepcap": "False"
 }
 
@@ -71,7 +72,7 @@ def setup_logger() -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M:%S"
     )
     rotating_handler.setFormatter(formatter)
-    logger.addHandler(rotating_handler)
+    #logger.addHandler(rotating_handler)
 
     # Optional: also log to stdout
     console_handler = logging.StreamHandler()
@@ -87,7 +88,7 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Run cybersecurity experiments with GA optimization.")
     parser.add_argument("--iterations", type=int, default=2, help="Number of GA iterations to run.")
-    parser.add_argument("--timeout", type=int, default=300, help="Number of seconds for iteration timeout.")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="Number of seconds for iteration timeout.")
     parser.add_argument("--skip_initial", action="store_true", help="Skip the initial parameter set run.")
     parser.add_argument("--skip_full", action="store_true", help="Skip the full parameter set run.")
     parser.add_argument("--ga_population_size", type=int, default=10, help="Population size for the genetic algorithm.")
@@ -103,13 +104,13 @@ def get_initial_parameters() -> List[Dict[str, str]]:
     Each dict corresponds to one combination to be tested.
     """
     bitlength_values = [2, 3, 8]
-    rounding_values = [0, 2, 4]
+    rounding_values = [1, 2]
     poi_values = ["broadcast_bpf"]
-    inputsource_values = ["ISD", "ISPN"]
+    inputsource_values = ["ISD", "ISPN", "timestamp"]
     subchanneling_values = ["none", "iphash"]
     subchanneling_bits_values = [0, 2, 4]
     ecc_values = ["none"]
-    multihashing_values = [0, 2, 8]
+    multihashing_values = [1, 2, 7]
 
     # Generate all combinations
     param_combinations = list(itertools.product(
@@ -148,14 +149,14 @@ def get_full_parameters() -> List[Dict[str, str]]:
     """
     Generate the full parameter space, then filter out invalid combinations.
     """
-    bitlength_values = [2, 3, 4, 8, 16, 32, 64]
-    rounding_values = [0, 2, 4, 6]
+    bitlength_values = [2, 3, 4, 8]
+    rounding_values = [0, 1, 2, 4]
     poi_values = ["broadcast_bpf", "all"]
-    inputsource_values = ["ISD", "ICD", "IPD", "ISPN", "timestamp"]
+    inputsource_values = ["IPD", "ISD", "ICD", "ISPN", "timestamp"]
     subchanneling_values = ["none", "baseipd", "iphash", "clockhash"]
     subchanneling_bits_values = [0, 2, 4, 8]
     ecc_values = ["none", "hamming", "hamming+", "inline-hamming+"]
-    multihashing_values = [0, 2, 4, 8]
+    multihashing_values = [0, 2, 4, 7]
 
     param_combinations = list(itertools.product(
         bitlength_values,
@@ -212,7 +213,6 @@ def generate_command(params: Dict[str, str], mode: str) -> List[str]:
     # Map param dict to server script arguments
     if mode == "server":
         cmd += [
-            f"--mode={params['mode']}",
             f"--poi={params['poi']}",
             f"--silence_poi={params['silence_poi']}",
             f"--silence_cc={params['silence_cc']}",
@@ -229,8 +229,7 @@ def generate_command(params: Dict[str, str], mode: str) -> List[str]:
         ]
     else:
         # Client-specific parameters
-        cmd += [
-            f"--mode={params['mode']}",            
+        cmd += [      
             f"--poi={params['poi']}",
             f"--silence_poi={params['silence_poi']}",
             f"--silence_cc={params['silence_cc']}",
@@ -268,66 +267,87 @@ def run_experiment(params: Dict[str, str], logger: logging.Logger, timeout: int)
     :param logger: Logger instance for tracking progress
     """
     start_time = time.time()
+    server_process = None
+    client_process = None
 
-    # Start server
-    server_cmd = generate_command(params, mode="server")
-    logger.info(f"Starting server with parameters: {params}")
     try:
-        #server_process = subprocess.Popen(server_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        server_process = subprocess.Popen(server_cmd)
-    except Exception as e:
-        logger.error(f"Failed to start server process: {e}")
-        return
+        # Start server
+        server_cmd = generate_command(params, mode="server")
+        logger.info(f"Starting server with parameters: {params}")
+        try:
+            #server_process = subprocess.Popen(server_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            server_process = subprocess.Popen(server_cmd)
+        except Exception as e:
+            logger.error(f"Failed to start server process: {e}")
+            return
 
-    # Wait for server to initialize
-    time.sleep(WAIT_BETWEEN_RUNS)
+        # Wait for server to initialize
+        time.sleep(WAIT_BETWEEN_RUNS)
 
-    # Start client
-    client_cmd = generate_command(params, mode="client")
-    logger.info("Starting client...")
-    try:
-        #client_process = subprocess.Popen(client_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        client_process = subprocess.Popen(client_cmd)
-    except Exception as e:
-        logger.error(f"Failed to start client process: {e}")
-        server_process.terminate()
-        return
+        # Start client
+        client_cmd = generate_command(params, mode="client")
+        logger.info("Starting client...")
+        try:
+            #client_process = subprocess.Popen(client_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            client_process = subprocess.Popen(client_cmd)
+        except Exception as e:
+            logger.error(f"Failed to start client process: {e}")
+            if server_process:
+                server_process.terminate()
+                server_process.wait(timeout=5)  # Wait up to 5 seconds for cleanup
+                if server_process.poll() is None:  # If still running
+                    server_process.kill()  # Force kill
+            return
 
-    # Wait for client with timeout
-    elapsed = time.time() - start_time
-    remaining = timeout - elapsed
-    try:
-        client_returncode = client_process.wait(timeout=remaining)
-        logger.info(f"Client finished with return code {client_returncode}")
-    except subprocess.TimeoutExpired:
-        logger.error("Client process timeout exceeded")
-        client_process.terminate()
-        server_process.terminate()
-        record_timeout_result(params, logger)
-        return
+        # Wait for client with timeout
+        elapsed = time.time() - start_time
+        remaining = timeout - elapsed
+        try:
+            client_returncode = client_process.wait(timeout=remaining)
+            logger.info(f"Client finished with return code {client_returncode}")
+        except subprocess.TimeoutExpired:
+            logger.error("Client process timeout exceeded")
+            record_timeout_result(params, logger)
+            return
 
-    # Wait for server with adjusted timeout
-    elapsed = time.time() - start_time
-    remaining = timeout - elapsed
-    if remaining <= 0:
-        logger.error("Timeout expired before waiting for server")
-        server_process.terminate()
-        record_timeout_result(params, logger)
-        return
-    try:
-        server_returncode = server_process.wait(timeout=remaining)
-        logger.info(f"Server finished with return code {server_returncode}")
-    except subprocess.TimeoutExpired:
-        logger.error("Server process timeout exceeded")
-        server_process.terminate()
-        record_timeout_result(params, logger)
-        return
+        # Wait for server with adjusted timeout
+        elapsed = time.time() - start_time
+        remaining = timeout - elapsed
+        if remaining <= 0:
+            logger.error("Timeout expired before waiting for server")
+            record_timeout_result(params, logger)
+            return
+        try:
+            server_returncode = server_process.wait(timeout=remaining)
+            logger.info(f"Server finished with return code {server_returncode}")
+        except subprocess.TimeoutExpired:
+            logger.error("Server process timeout exceeded")
+            record_timeout_result(params, logger)
+            return
 
-    # Optionally wait for server to produce stats
-    # Depending on your server script, you might want to wait or
-    # forcibly terminate after a certain time
-    server_returncode = server_process.wait()
-    logger.info(f"Server finished with return code {server_returncode}")
+    finally:
+        # Ensure processes are terminated regardless of how we exit the function
+        if client_process and client_process.poll() is None:
+            logger.info("Terminating client process")
+            try:
+                client_process.terminate()
+                client_process.wait(timeout=5)  # Wait up to 5 seconds
+                if client_process.poll() is None:  # If still running
+                    logger.info("Killing client process")
+                    client_process.kill()  # Force kill
+            except Exception as e:
+                logger.error(f"Error terminating client process: {e}")
+
+        if server_process and server_process.poll() is None:
+            logger.info("Terminating server process")
+            try:
+                server_process.terminate()
+                server_process.wait(timeout=5)  # Wait up to 5 seconds
+                if server_process.poll() is None:  # If still running
+                    logger.info("Killing server process")
+                    server_process.kill()  # Force kill
+            except Exception as e:
+                logger.error(f"Error terminating server process: {e}")
 
 
 def already_run(params: Dict[str, str], csv_file: str) -> bool:

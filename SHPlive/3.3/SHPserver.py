@@ -22,16 +22,16 @@ import pandas as pd
 STATIC_VERSION = '3.3'
 
 # options
-DEFAULT_POI     = 'broadcast_domain' # all, port, subnet, broadcast_domain, broadcast_bpf
-DEFAULT_REFERENCE = 'last_poi' # direct, last_poi
+DEFAULT_POI     = 'broadcast_bpf' # all, port, subnet, broadcast_domain, broadcast_bpf
+DEFAULT_REFERENCE = 'direct' # direct, last_poi
 DEFAULT_RTT     = 0 # RTT in milliseconds
 DEFAULT_SILENCE = 2
 DEFAULT_INPUTSOURCE = 'ISD'
 DEFAULT_SUBCHANNELING = 'none'
 DEFAULT_SUB_BITS  = 0
-DEFAULT_BITLENGTH = 8
+DEFAULT_BITLENGTH = 3
 DEFAULT_ROUNDING  = 0
-DEFAULT_REHASHING = 7
+DEFAULT_REHASHING = 2
 DEFAULT_ECC       = 'none' # live ecc is still experimental
 DEFAULT_SECRET = 'secret_message_received.txt'
 DEFAULT_RETRY = False
@@ -157,7 +157,7 @@ def capture_packets(arp_sender, poi, reference, rtt, port, subnet, inputsource, 
 
     try:
         if (poi == 'broadcast_bpf'):
-            bpf_filter = SHP_algos.STATIC_BPF_FILTERv2
+            bpf_filter = SHP_algos.STATIC_BPF_FILTER
         else:
             bpf_filter = ''
 
@@ -235,7 +235,7 @@ def process_packet(arp_sender, packet, poi, reference, rtt, port, subnet, inputs
 
     # -> its a valid POI
     counter_poi_received += 1
-    logging.debug(f'{packet.time} POI detected: {packet.summary()}')
+    logging.debug(f'{packet.time} POI')
        
     # Check if packet is a covert channel message
     isCovert, bits3, bits4 = SHP_live_networking.is_covert_pointer(packet, SHP_live_networking.STATIC_IP_CC)
@@ -529,8 +529,7 @@ if __name__ == "__main__":
     SHP_live_networking.check_scapy_sniff_permission()
 
     # list interfaces recorded
-    if (DEFAULT_LOGGING == logging.DEBUG):
-        SHP_live_networking.display_interfaces_and_selected(selected_iface=active_iface)
+    # SHP_live_networking.display_interfaces_and_selected(selected_iface=active_iface)
 
     # check ecc parameter and calc ecc length
     global checksum_length

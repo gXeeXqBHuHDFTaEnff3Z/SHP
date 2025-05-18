@@ -1,0 +1,13 @@
+2025-04-27 21:42:56,680 - INFO - Processing baseline folder...
+2025-04-27 21:46:41,140 - INFO - Compressibility results saved to c:\Users\Chris\Documents\GitHub\SHP\helper\compressibility_results.csv
+2025-04-27 21:46:41,140 - INFO - Generating distribution plots...
+2025-04-27 21:46:41,488 - INFO - Histogram saved as compressibility_20250427_214641_histogram.png
+2025-04-27 21:46:41,778 - INFO - Density plot saved as compressibility_20250427_214641_density.png
+2025-04-27 21:46:42,046 - INFO - Violin plot saved as compressibility_20250427_214641_violin.png
+2025-04-27 21:46:42,046 - INFO - Generating ROC curves...
+2025-04-27 21:46:42,047 - WARNING - No compare folders found for ROC generation.
+2025-04-27 21:46:42,047 - INFO - Analysis complete. Summary of results:
+2025-04-27 21:46:42,047 - INFO - Total windows scored: 1103
+2025-04-27 21:46:42,047 - INFO - Folders processed: 1
+2025-04-27 21:46:42,047 - INFO - Distribution plots saved with prefix: compressibility_20250427_214641
+2025-04-27 21:46:42,047 - INFO - Check the rotating log and CSV for full details.

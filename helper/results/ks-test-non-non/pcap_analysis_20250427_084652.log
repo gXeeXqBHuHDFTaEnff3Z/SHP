@@ -1,0 +1,13 @@
+2025-04-27 08:46:52,304 - INFO - Starting PCAP analysis
+2025-04-27 08:46:52,304 - INFO - Folder 1: ../_pcaps/detectability-non-shp
+2025-04-27 08:46:52,305 - INFO - Folder 2: ../_pcaps/detectability-non-shp
+2025-04-27 08:46:52,305 - INFO - Results directory: ./results/
+2025-04-27 08:46:52,306 - INFO - Found 10 PCAP/PCAPNG files in ../_pcaps/detectability-non-shp
+2025-04-27 08:46:52,307 - INFO - Found 10 PCAP/PCAPNG files in ../_pcaps/detectability-non-shp
+2025-04-27 08:46:52,308 - INFO - Generated 90 file pairs for comparison
+2025-04-27 09:51:59,968 - INFO - Saved detailed results to ./results/ks_test_detailed_results.csv
+2025-04-27 09:51:59,971 - INFO - Saved summary results to ./results/ks_test_summary_results.csv
+2025-04-27 09:52:01,323 - INFO - Saved D statistic histogram to ./results/ks_d_statistic_histogram.png
+2025-04-27 09:52:01,816 - INFO - Saved D vs p-value scatterplot to ./results/ks_d_vs_pvalue_scatter.png
+2025-04-27 09:52:02,461 - INFO - Saved top file pairs bar chart to ./results/ks_top_file_pairs_bar.png
+2025-04-27 09:52:02,461 - INFO - Analysis completed successfully

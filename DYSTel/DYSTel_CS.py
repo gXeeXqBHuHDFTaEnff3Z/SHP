@@ -95,7 +95,7 @@ def update_csv_stats():
 
     # Write out the CSV file with header.
     with open(csv_stats_file, mode='w', newline='') as csvfile:
-        fieldnames = ["uuid", "settings", "start", "duration", "packets", "poi_critical_fraction", "matches", "avg_distance", "bandwidth_per_sec", "stego_bandwidth"]
+        fieldnames = ["uuid", "settings", "start", "duration", "packets", "poi_critical_fraction", "matches", "avg_distance", "bandwidth_per_sec", "stego_bandwidth", "comment"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for r in rows:
@@ -110,8 +110,8 @@ if len(sys.argv) < MIN_ARGS_FOR_CS:
     sys.argv = [sys.argv[0],
                 "secret_message_long.txt",   # Covert Message File
                 "1",                   # # of bytes at once (number_of_chars)
-                #"Realtek USB GbE Family Controller",  # Interface (change as needed, e.g., "eth0")
-                "Qualcomm FastConnect 6900 Wi-Fi 6E Dual Band Simultaneous (DBS) WiFiCx Network Adapter #4",
+                "Realtek USB GbE Family Controller",  # Interface (change as needed, e.g., "eth0")
+                #"Qualcomm FastConnect 6900 Wi-Fi 6E Dual Band Simultaneous (DBS) WiFiCx Network Adapter #4",
                 "dystel_cs.log",       # Logfile for percent coverage
                 "cs",                  # Mode: 'cs' for sender (use 'cr' for receiver mode, but then add 2 more arguments)
                 "trivial",             # Coding method: trivial (other options: trivial_robust, ext, ext_robust, ECC(experimental))

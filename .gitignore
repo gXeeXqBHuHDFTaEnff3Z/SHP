@@ -6,3 +6,5 @@
 .idea/
 __pycache__/
 venv/
+_pcaps
+.pcapng

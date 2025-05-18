@@ -20,18 +20,18 @@ import traceback
 STATIC_VERSION = '3.3'
 
 # options
-DEFAULT_POI     = 'broadcast_domain'# # broadcast_bpf, all, port, subnet, broadcast_domain
-DEFAULT_REFERENCE = 'last_poi' # direct, last_poi
+DEFAULT_POI     = 'broadcast_bpf'# # broadcast_bpf, all, port, subnet, broadcast_domain
+DEFAULT_REFERENCE = 'direct' # direct, last_poi
 DEFAULT_RTT     = 0 # in milliseconds
 DEFAULT_SILENCE = 2 # in milliseconds
 DEFAULT_INPUTSOURCE = 'ISD'
 DEFAULT_SUBCHANNELING = 'none'
 DEFAULT_SUB_BITS  = 0 # 0-8
-DEFAULT_BITLENGTH = 8 # 0-8
+DEFAULT_BITLENGTH = 3 # 0-8
 DEFAULT_ROUNDING  = 0 # 0-6
-DEFAULT_REHASHING = 7 # 0-8
+DEFAULT_REHASHING = 2 # 0-8
 DEFAULT_ECC       = 'none' # live ecc is still experimental
-DEFAULT_SECRET = 'secret_message_medium.txt'
+DEFAULT_SECRET = 'secret_message_short.txt'
 DEFAULT_SAVEPCAP = False
 DEFAULT_LOGGING = logging.INFO
 
@@ -65,7 +65,7 @@ log_file = os.path.join(script_dir, 'SHPclient.log')
 # Configure logging for error tracking
 logging.basicConfig(
     level=DEFAULT_LOGGING,
-    format='%(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     #datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[
         #logging.FileHandler(log_file),  # Write to file
@@ -177,7 +177,7 @@ def capture_packets(poi, reference, rtt, silence_poi, silence_cc, port, subnet, 
 
     try:
         if (poi == 'broadcast_bpf'):
-            bpf_filter = SHP_algos.STATIC_BPF_FILTERv2
+            bpf_filter = SHP_algos.STATIC_BPF_FILTER
         else:
             bpf_filter = ''
 
@@ -247,7 +247,7 @@ def process_packet(packet, poi, reference, rtt, silence_poi, silence_cc, port, s
         return
     
     # -> its a valid POI   
-    logging.debug(f'{packet.time} POI detected: {packet.summary()}')
+    logging.debug(f'{packet.time} POI')
 
     # Write all POI packets to PCAPNG file
     if savepcap:
