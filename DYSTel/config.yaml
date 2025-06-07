@@ -1,0 +1,59 @@
+# Example Configuration for DYSTel Manager
+# This file contains all parameters needed for the CR and CS scripts
+
+# Configuration for CR (Receiver) script
+cr:
+  # Message file to write the received data to
+  covert_message_file: "secret_message_long.txt"
+  
+  # Number of bytes to process at once
+  number_of_chars: 1
+  
+    # Network interface to use
+  interface: "Realtek USB GbE Family Controller"
+  #interface: "enp89s0"
+
+  # Log file to record progress
+  logfile: "dystel_cr.log"
+  
+  # Mode (cr = receiver)
+  mode: "cr"
+  
+  # Encoding method to use
+  encoding_method: "trivial"
+  
+  # ARP Broadcast Target IP
+  signal_arp: "127.55.5.5"
+  
+  # Source IP for ARP signals
+  signal_arp_from: "127.0.0.1"
+  
+  # Output file for received message
+  received_message_file: "dystel_received.txt"
+  
+  # Delay in seconds before starting the CS script
+  startup_delay: 3
+
+# Configuration for CS (Sender) script
+cs:
+  # Message file containing the data to send
+  covert_message_file: "secret_message_long.txt"
+  
+  # Number of bytes to process at once
+  number_of_chars: 1
+  
+  # Network interface to use
+  interface: "Realtek USB GbE Family Controller"
+  #interface: "enp89s0"
+  
+  # Log file to record progress
+  logfile: "dystel_cs.log"
+  
+  # Mode (cs = sender)
+  mode: "cs"
+  
+  # Encoding method to use
+  encoding_method: "trivial"
+  
+  # ARP Broadcast Target IP
+  signal_arp: "127.55.5.5"

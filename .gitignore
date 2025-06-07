@@ -8,3 +8,5 @@ __pycache__/
 venv/
 _pcaps
 .pcapng
+DYSTel/dystel_cs.log
+DYSTel/dystel_cr.log

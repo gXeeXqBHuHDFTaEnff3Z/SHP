@@ -1,0 +1,22 @@
+# Mission
+
+The scripts mission is to be a worker that runs and watches over two network script called DYSTel_CR and DYSTel_CS.
+
+## input
+
+- filepath_config (default: config.yaml)
+
+The config.yaml file holds all the parameters used for the CR and CS scripts.
+
+## processing
+
+(1) change the working directory to the directory where this script is located
+(2) start rotating log
+(3) repeat until stopped:
+	(a) start CR script
+	(b) wait 3 seconds
+	(c) start CS script
+	(d) if one of the child scripts is stopped, stop the other one as well
+	(e) repeat
+
+Give the output of both child scripts on console with a prefix of "(CS)" or "(CR)". prefix your own with "(MA)". Make sure the child scripts run well in parallel and you are not using up all cpu cores.

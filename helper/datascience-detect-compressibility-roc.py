@@ -227,37 +227,47 @@ def plot_distributions(df: pd.DataFrame, output_prefix: str):
     """
     # Set a modern style
     sns.set_theme(style="whitegrid")
+    
+    # Define our custom palette
+    custom_palette = [
+        "#1f77b4",  # Deep Blue
+        "#d62728",  # Vermilion Red
+        "#2ca02c",  # Forest Green
+        "#9467bd",  # Purple
+        "#ff7f0e"   # Dark Orange
+    ]
 
     # Histogram
     plt.figure(figsize=(10, 6))
-    sns.histplot(data=df, x="score", hue="folder", kde=False, element="step", palette="deep")
+    sns.histplot(data=df, x="score", hue="folder", kde=False, element="step", palette=custom_palette)
     plt.title("Histogram of Compressibility Scores by Folder")
     plt.xlabel("Compressibility Score")
     plt.ylabel("Count")
     hist_filename = f"{output_prefix}_histogram.png"
-    plt.savefig(hist_filename, dpi=300)
+    plt.savefig(hist_filename, dpi=300, bbox_inches='tight')
     plt.close()
     logger.info(f"Histogram saved as {hist_filename}")
 
     # Density Plot
     plt.figure(figsize=(10, 6))
-    sns.kdeplot(data=df, x="score", hue="folder", fill=True, common_norm=False, palette="deep")
+    sns.kdeplot(data=df, x="score", hue="folder", fill=True, common_norm=False, palette=custom_palette, alpha=0.7)
     plt.title("Density Plot of Compressibility Scores by Folder")
     plt.xlabel("Compressibility Score")
     plt.ylabel("Density")
     density_filename = f"{output_prefix}_density.png"
-    plt.savefig(density_filename, dpi=300)
+    plt.savefig(density_filename, dpi=300, bbox_inches='tight')
     plt.close()
     logger.info(f"Density plot saved as {density_filename}")
 
     # Violin Plot
     plt.figure(figsize=(10, 6))
-    sns.violinplot(data=df, x="folder", y="score", palette="deep", inner="quartile")
+    sns.violinplot(data=df, x="folder", y="score", palette=custom_palette, inner="quartile")
     plt.title("Violin Plot of Compressibility Scores by Folder")
     plt.xlabel("Traffic Type")
     plt.ylabel("Compressibility Score")
+    plt.xticks(rotation=45, ha='right')  # Rotate labels for better readability if many folders
     violin_filename = f"{output_prefix}_violin.png"
-    plt.savefig(violin_filename, dpi=300)
+    plt.savefig(violin_filename, dpi=300, bbox_inches='tight')
     plt.close()
     logger.info(f"Violin plot saved as {violin_filename}")
 
@@ -278,8 +288,18 @@ def plot_roc_curves(df: pd.DataFrame, baseline_folder: str, output_prefix: str):
 
     plt.figure(figsize=(8, 6))
 
-    # For color palette, we can use a suitable range. We skip the first color if it's the baseline
-    colors = itertools.cycle(sns.color_palette("Spectral", n_colors=len(compare_folders)))
+    # Define a custom color palette with high contrast colors
+    # These colors have good visibility on white backgrounds
+    custom_palette = [
+        "#1f77b4",  # Deep Blue
+        "#d62728",  # Vermilion Red
+        "#2ca02c",  # Forest Green
+        "#9467bd",  # Purple
+        "#ff7f0e"   # Dark Orange
+    ]
+    
+    # Cycle through our custom palette
+    colors = itertools.cycle(custom_palette)
 
     # For each compare folder, build labels and scores
     baseline_scores = df[df['folder'] == baseline_folder]['score']
@@ -294,26 +314,31 @@ def plot_roc_curves(df: pd.DataFrame, baseline_folder: str, output_prefix: str):
         all_labels = np.concatenate([y_baseline, y_compare])
 
         # Calculate ROC
-        fpr, tpr, thresholds = roc_curve(all_labels, -all_scores) # covert channels should have lower compressibility scores than non-covert channels
+        fpr, tpr, thresholds = roc_curve(all_labels, -all_scores)  # covert channels should have lower compressibility scores than non-covert channels
         roc_auc = auc(fpr, tpr)
 
-        # Plot
+        # Plot with thicker line for better visibility
         color = next(colors)
-        plt.plot(fpr, tpr, label=f"{folder} (AUC = {roc_auc:.2f})", color=color)
+        plt.plot(fpr, tpr, label=f"{folder} (AUC = {roc_auc:.2f})", color=color, linewidth=2.5)
 
-    # Diagonal line
-    plt.plot([0, 1], [0, 1], 'r--', label="Chance (AUC = 0.50)")
+    # Diagonal line (dashed with higher contrast)
+    plt.plot([0, 1], [0, 1], 'k--', label="Chance (AUC = 0.50)", alpha=0.7, linewidth=1.5)
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.title("ROC Curves")
-    plt.legend(loc="lower right")
-
+    plt.legend(loc="lower right", framealpha=0.9)
+    
+    # Add grid for better readability
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    # Set background color to pure white
+    plt.gcf().set_facecolor('white')
+    
     roc_filename = f"{output_prefix}_roc.png"
-    plt.savefig(roc_filename, dpi=300)
+    plt.savefig(roc_filename, dpi=300, bbox_inches='tight')
     logger.info(f"ROC chart saved as {roc_filename}")
-    # Optionally display it directly if desired
     plt.show()
 
 

@@ -1,0 +1,8 @@
+numpy
+scapy
+bitstring
+netifaces
+netaddr
+bchlib
+pyyaml
+psutil

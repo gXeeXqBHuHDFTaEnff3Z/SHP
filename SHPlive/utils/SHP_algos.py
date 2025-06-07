@@ -449,7 +449,7 @@ def apply_deskew(raw_data, deskew, bitlength):
         if isinstance(raw_data, decimal.Decimal):
             raw_data = float(raw_data)  # Convert Decimal to float for compatibility
             
-        ipd_transformed = math.power(raw_data + 1, 0.5)  # Square root transformation
+        ipd_transformed = math.pow(raw_data + 1, 0.5)  # Square root transformation
         return format(int(ipd_transformed * 1e6), f'0{bitlength}b')
     elif deskew == 'none':
         return format(int(raw_data), f'0{bitlength}b') # BUG? This looks wrong
