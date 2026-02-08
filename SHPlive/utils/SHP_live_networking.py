@@ -5,7 +5,7 @@ import sys
 import struct
 import socket
 import traceback
-from scapy.all import sniff, Ether, ARP, sendp, conf, show_interfaces
+from scapy.all import sniff, Ether, ARP, ICMP, IP, sendp, send, conf, show_interfaces
 
 #STATIC_IP_CC             = '127.55.0.0' for local testing
 STATIC_IP_CC             = '10.59.0.0'
@@ -221,18 +221,151 @@ def isValidPacket(packet):
     """Validates packet structure and returns boolean indicating if packet is valid"""
     if not packet:
         return False
-    
+
     try:
         # Basic structure checks
         if not hasattr(packet, 'time') or not hasattr(packet, 'src') or not hasattr(packet, 'dst'):
             return False
-            
+
         # Check for common corrupted packet indicators
         if len(packet) < 14:  # Minimum Ethernet frame size
             return False
-            
+
         return True
     except Exception as e:
         print(f"[ERR!] Error in packet validation: {str(e)}")
         return False
+
+
+# ========== ICMP-based Covert Channel Functions (WAN-capable) ==========
+
+def prepare_icmp_sender(target_ip: str):
+    """
+    Prepares a fast ICMP sender function for a given target IP.
+
+    The returned function accepts two 8-bit binary strings (bitstrings) and:
+      1) Encodes the first bitstring in the ICMP ID field (16-bit, using lower 8 bits)
+      2) Encodes the second bitstring in the ICMP Sequence field (16-bit, using lower 8 bits)
+      3) Sends an ICMP Echo Request (ping) packet
+
+    This enables covert channel communication over WAN using ICMP timing patterns.
+
+    Usage:
+      icmp_sender = prepare_icmp_sender("8.8.8.8")
+      icmp_sender("00000000", "00000000")  # INIT message
+      icmp_sender("11111111", "11111101")  # Data pointer
+      icmp_sender("11111111", "11111110")  # STOP message
+
+    Args:
+        target_ip: Destination IP address for ICMP packets
+
+    Returns:
+        Function that accepts (bitstring_id, bitstring_seq, return_packet=False)
+    """
+
+    def icmp_sender(bitstring_id: str, bitstring_seq: str, return_packet: bool = False):
+        """
+        Sends an ICMP Echo Request with encoded bitstrings.
+
+        Args:
+            bitstring_id: 8-bit binary string to encode in ICMP ID field
+            bitstring_seq: 8-bit binary string to encode in ICMP Sequence field
+            return_packet: If True, return packet instead of sending (for testing)
+
+        Raises:
+            ValueError: If bitstrings are invalid (not 8 bits or not binary)
+        """
+        # Validate bitstrings
+        if len(bitstring_id) != 8 or not all(c in '01' for c in bitstring_id):
+            raise ValueError(f"Invalid ID bitstring: {bitstring_id}. Must be 8 binary digits.")
+        if len(bitstring_seq) != 8 or not all(c in '01' for c in bitstring_seq):
+            raise ValueError(f"Invalid Seq bitstring: {bitstring_seq}. Must be 8 binary digits.")
+
+        # Convert bitstrings to integers
+        icmp_id = int(bitstring_id, 2)
+        icmp_seq = int(bitstring_seq, 2)
+
+        # Validate range (should be 0-255 for 8-bit values)
+        if not (0 <= icmp_id < 256):
+            raise ValueError(f"Invalid ICMP ID value: {icmp_id}. Must be 0-255.")
+        if not (0 <= icmp_seq < 256):
+            raise ValueError(f"Invalid ICMP Seq value: {icmp_seq}. Must be 0-255.")
+
+        # Build ICMP Echo Request packet
+        # Type 8 = Echo Request, Code 0
+        pkt = IP(dst=target_ip) / ICMP(type=8, code=0, id=icmp_id, seq=icmp_seq)
+
+        # Return packet for testing or send it
+        if return_packet:
+            return pkt
+        else:
+            # Send at layer 3 (IP) - works across routed networks
+            send(pkt, verbose=False)
+
+    return icmp_sender
+
+
+def send_icmp_request(icmp_sender, bitstring_id, bitstring_seq):
+    """
+    Sends an ICMP request using the provided sender function and bitstring parameters.
+    Logs the timestamp and parameters on success, logs errors on failure.
+
+    This is the ICMP equivalent of send_arp_request() for WAN environments.
+
+    Args:
+        icmp_sender (callable): Function that sends the actual ICMP request
+        bitstring_id (str): First bitstring parameter (encoded in ICMP ID)
+        bitstring_seq (str): Second bitstring parameter (encoded in ICMP Sequence)
+
+    Raises:
+        Exception: Logs any exceptions that occur during ICMP request sending
+    """
+    try:
+        icmp_sender(bitstring_id, bitstring_seq)
+
+        # Command-line feedback with timestamp
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Uncomment for debugging:
+        # print(f"[INFO] ICMP-Pointer sent @[{timestamp}] with options [{bitstring_id}:{bitstring_seq}]")
+
+    except Exception as e:
+        print(f"[ERR!] sending ICMP pointer with options [{bitstring_id}:{bitstring_seq}]: {e}")
+
+
+def is_covert_icmp_pointer(packet, target_ip):
+    """
+    Checks if 'packet' is an ICMP Echo Request whose destination IP matches 'target_ip'.
+    If so, extracts the bitstrings encoded in the ICMP ID and Sequence fields.
+
+    This is the ICMP equivalent of is_covert_pointer() for WAN environments.
+
+    Args:
+        packet: A scapy packet
+        target_ip: Target IP address to match (destination of ICMP packet)
+
+    Returns:
+        tuple: (bool, str, str) - (is_covert, id_bitstring, seq_bitstring)
+               - is_covert: True if packet is a covert ICMP pointer
+               - id_bitstring: 8-bit binary string from ICMP ID field
+               - seq_bitstring: 8-bit binary string from ICMP Sequence field
+               Returns (False, '', '') if not a covert packet
+    """
+    # Ensure this is an ICMP Echo Request packet
+    if ICMP in packet and IP in packet:
+        # Check if it's an Echo Request (type 8)
+        if packet[ICMP].type == 8:
+            # Check if destination matches our target IP
+            if packet[IP].dst == target_ip:
+                # Extract ICMP ID and Sequence fields
+                icmp_id = packet[ICMP].id
+                icmp_seq = packet[ICMP].seq
+
+                # Convert to 8-bit binary strings (take lower 8 bits)
+                # Use modulo to handle cases where fields might be > 255
+                id_bitstring = f"{icmp_id & 0xFF:08b}"
+                seq_bitstring = f"{icmp_seq & 0xFF:08b}"
+
+                return True, id_bitstring, seq_bitstring
+
+    return False, "", ""
 

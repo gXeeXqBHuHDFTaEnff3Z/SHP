@@ -5,7 +5,7 @@ import socket
 import time
 import traceback
 import scapy
-from scapy.all import sniff, wrpcap
+from scapy.all import sniff, wrpcap, ICMP, IP
 from scapy.layers.l2 import ARP
 from scapy.config import conf
 #conf.debug_dissector = 2 # debug full scapy error
@@ -24,6 +24,7 @@ STATIC_VERSION = '3.3'
 # options
 DEFAULT_POI     = 'broadcast_domain' # all, port, subnet, broadcast_domain, broadcast_bpf
 DEFAULT_REFERENCE = 'last_poi' # direct, last_poi
+DEFAULT_PROTOCOL = 'arp' # arp, icmp
 DEFAULT_RTT     = 0 # RTT in milliseconds
 DEFAULT_SILENCE = 2
 DEFAULT_INPUTSOURCE = 'ISD'
@@ -89,6 +90,7 @@ def parse_arguments():
     # arguments for poi filter
     parser.add_argument('--poi', type=str, default=DEFAULT_POI, help="Packet of interest type.") # all, port, subnet, broadcast_domain, broadcast_bpf
     parser.add_argument('--reference', choices=['last_poi', 'direct'], default=DEFAULT_REFERENCE, help="Packet the pointer is referencing.")
+    parser.add_argument('--protocol', choices=['arp', 'icmp'], default=DEFAULT_PROTOCOL, help="Covert channel protocol: arp (LAN) or icmp (WAN).")
     parser.add_argument('--rtt', type=int, default=DEFAULT_RTT, help="Round Trip Time in ms between CS and CR, for timing recalculation.")
     parser.add_argument('--port', type=int, choices=range(0, 65536), default=443, help="Port number for POI (0-65535).")
     parser.add_argument('--subnet', type=str, default="10.0.0.0/8", help="Subnet for POI function (e.g., '192.168.1.0/24').")
@@ -132,14 +134,14 @@ def args_check_multihashing(value: str) -> int:
     return ivalue
 
 # Capture Packet Function
-def capture_packets(arp_sender, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, silence_poi, silence_cc, secret, savepcap):
+def capture_packets(cc_sender, protocol, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, silence_poi, silence_cc, secret, savepcap):
     global stop_sniffing
     global timestamp_fin
 
     def packet_handler(packet):
         """Wrapper function to handle packet processing with error handling"""
         try:
-            process_packet(arp_sender, packet, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor,
+            process_packet(cc_sender, protocol, packet, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor,
                          subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, silence_poi, silence_cc, secret, savepcap)
         except scapy.error.Scapy_Exception as e:
             stacktrace = traceback.format_exc()
@@ -148,12 +150,12 @@ def capture_packets(arp_sender, poi, reference, rtt, port, subnet, inputsource, 
             stacktrace = traceback.format_exc()
             logging.error(f"Error processing packet: {str(e)} with stacktrace {stacktrace}")
         return
-    
+
     # Whitelisting only protocols we want to dissect for speed and reducing error complexity
-    conf.protocol_whitelist = [
-        "Ethernet", "IP", "IPv6", "ARP", 
-        # "DNS" is *not* listed here, so DNS gets skipped
-    ]
+    protocol_list = ["Ethernet", "IP", "IPv6", "ARP"]
+    if protocol == 'icmp':
+        protocol_list.append("ICMP")
+    conf.protocol_whitelist = protocol_list
 
     try:
         if (poi == 'broadcast_bpf'):
@@ -191,7 +193,7 @@ def capture_packets(arp_sender, poi, reference, rtt, port, subnet, inputsource, 
         logging.info("Capture thread terminated")
  
 # Process Packet: Filter and Log to File
-def process_packet(arp_sender, packet, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, silence_poi, silence_cc, secret, savepcap):
+def process_packet(cc_sender, protocol, packet, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, silence_poi, silence_cc, secret, savepcap):
     global secret_bits
     global message_chunk
     global message_received # message as string after completion
@@ -236,9 +238,15 @@ def process_packet(arp_sender, packet, poi, reference, rtt, port, subnet, inputs
     # -> its a valid POI
     counter_poi_received += 1
     logging.debug(f'{packet.time} POI detected: {packet.summary()}')
-       
-    # Check if packet is a covert channel message
-    isCovert, bits3, bits4 = SHP_live_networking.is_covert_pointer(packet, SHP_live_networking.STATIC_IP_CC)
+
+    # Check if packet is a covert channel message (protocol-specific)
+    if protocol == 'arp':
+        isCovert, bits3, bits4 = SHP_live_networking.is_covert_pointer(packet, SHP_live_networking.STATIC_IP_CC)
+    elif protocol == 'icmp':
+        isCovert, bits3, bits4 = SHP_live_networking.is_covert_icmp_pointer(packet, SHP_live_networking.STATIC_IP_CC)
+    else:
+        isCovert = False
+        bits3 = bits4 = ''
         
     # Handle covert channel signals
     if isCovert:
@@ -249,7 +257,16 @@ def process_packet(arp_sender, packet, poi, reference, rtt, port, subnet, inputs
         if (bits4 == SHP_live_networking.STATIC_BITSTRING_STOP):
             stop_sniffing = True
             timestamp_fin = packet.time
-            logging.info(f"{packet.time} Got covert channel FIN: {packet[ARP].pdst} with options [{bits3}:{bits4}]")
+
+            # Extract destination for logging (protocol-specific)
+            if protocol == 'arp' and ARP in packet:
+                dest = packet[ARP].pdst
+            elif protocol == 'icmp' and IP in packet:
+                dest = packet[IP].dst
+            else:
+                dest = "unknown"
+
+            logging.info(f"{packet.time} Got covert channel FIN: {dest} with options [{bits3}:{bits4}]")
 
             # write message to file
             message_received = SHP_algos.write_secret_message(secret, secret_bits, source_start)
@@ -264,8 +281,19 @@ def process_packet(arp_sender, packet, poi, reference, rtt, port, subnet, inputs
         # Handle CC START message
         elif (bits4 == SHP_live_networking.STATIC_BITSTRING_INIT):
             timestamp_start = packet.time - (rtt / 2000)  # Adjust this packets time for RTT/2
-            source_start = packet[ARP].psrc  # Note down the source IP
-            logging.info(f"Received covert channel START: {packet[ARP].pdst} with options [{bits3}:{bits4}]@{packet.time}")
+
+            # Extract source IP (protocol-specific)
+            if protocol == 'arp' and ARP in packet:
+                source_start = packet[ARP].psrc
+                dest = packet[ARP].pdst
+            elif protocol == 'icmp' and IP in packet:
+                source_start = packet[IP].src
+                dest = packet[IP].dst
+            else:
+                source_start = "unknown"
+                dest = "unknown"
+
+            logging.info(f"Received covert channel START: {dest} with options [{bits3}:{bits4}]@{packet.time}")
             return
         
         # Ignore CC RETRY
@@ -303,7 +331,10 @@ def process_packet(arp_sender, packet, poi, reference, rtt, port, subnet, inputs
             if not (checksum_is == checksum_should):
              logging.warning(f"{packet.time} WATCHDOG MISMATCH | source:{source_data} -> msg:{secret_bits_new} | poi@{data_packet.time} | lastdata {last_data_per_subchannel} | is:{checksum_is} != should:{checksum_should} | CC pointer: {counter_cc_pointer_received}")
              if DEFAULT_RETRY:
-                SHP_live_networking.send_arp_request(arp_sender, checksum_should, SHP_live_networking.STATIC_BITSTRING_RETRY)     
+                if protocol == 'arp':
+                    SHP_live_networking.send_arp_request(cc_sender, checksum_should, SHP_live_networking.STATIC_BITSTRING_RETRY)
+                elif protocol == 'icmp':
+                    SHP_live_networking.send_icmp_request(cc_sender, checksum_should, SHP_live_networking.STATIC_BITSTRING_RETRY)     
              
              if (inputsource == 'ISPN'): 
                 last_data_per_subchannel[subchannel] = 0
@@ -316,7 +347,10 @@ def process_packet(arp_sender, packet, poi, reference, rtt, port, subnet, inputs
         # Handle no START, no FIN and we had no data packets to point to
         else:
             if DEFAULT_RETRY:
-                SHP_live_networking.send_arp_request(arp_sender, '00000000', SHP_live_networking.STATIC_BITSTRING_RETRY)
+                if protocol == 'arp':
+                    SHP_live_networking.send_arp_request(cc_sender, '00000000', SHP_live_networking.STATIC_BITSTRING_RETRY)
+                elif protocol == 'icmp':
+                    SHP_live_networking.send_icmp_request(cc_sender, '00000000', SHP_live_networking.STATIC_BITSTRING_RETRY)
             logging.warning(f"{packet.time} No valid data POI seen before CC message with options {bits3}:{bits4}@{packet.time}).")
             counter_data_ignored_because_timeout += 1
 
@@ -475,22 +509,22 @@ def open_csv_in_excel(csv_file):
 
 
 # Start Packet Capture in a Thread
-def start_shpserver(arp_sender, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, silence_poi, silence_cc, secret, savepcap):
+def start_shpserver(cc_sender, protocol, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor, subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, silence_poi, silence_cc, secret, savepcap):
     global stop_sniffing
     global packet_pcap_file
 
     # save packets to a pcap named after the options
     safe_timestamp = datetime.datetime.now().isoformat().replace(":", "-").replace(" ", "_")
-    packet_pcap_file = os.path.join(script_dir, f'{safe_timestamp}-SHPserver-{poi}-{inputsource}-{bitlength}b-{rounding_factor}r-{multihashing}m-{subchanneling}_{subchanneling_bits}s-{ecc}.pcapng') 
+    packet_pcap_file = os.path.join(script_dir, f'{safe_timestamp}-SHPserver-{protocol}-{poi}-{inputsource}-{bitlength}b-{rounding_factor}r-{multihashing}m-{subchanneling}_{subchanneling_bits}s-{ecc}.pcapng')
 
     try:
-        logging.info(f"Starting SHPserver (= covert receiver) with parameters: poi={poi}, inputsource={inputsource}, bitlength={bitlength}, rounding={rounding_factor}, multihashing={multihashing}, ecc={ecc}, savepcap={savepcap}")
-        
+        logging.info(f"Starting SHPserver (= covert receiver) with parameters: protocol={protocol}, poi={poi}, inputsource={inputsource}, bitlength={bitlength}, rounding={rounding_factor}, multihashing={multihashing}, ecc={ecc}, savepcap={savepcap}")
+
         # Start capture in a separate thread
         capture_thread = threading.Thread(
             target=capture_packets,
-            args=(arp_sender, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor, 
-                  subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc, 
+            args=(cc_sender, protocol, poi, reference, rtt, port, subnet, inputsource, deskew, bitlength, rounding_factor,
+                  subchanneling, subchanneling_bits, multihashing, ooodelivery, ecc,
                   silence_poi, silence_cc, secret, savepcap),
             name="PacketCaptureThread"
         )
@@ -541,10 +575,16 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(current_script_path)
     args.secret = os.path.join(script_dir, args.secret)
 
-    # prepare our sockets
-    arp_sender = SHP_live_networking.prepare_arp_sender(SHP_live_networking.STATIC_IP_CC)
+    # prepare our sockets (protocol-specific)
+    if args.protocol == 'arp':
+        cc_sender = SHP_live_networking.prepare_arp_sender(SHP_live_networking.STATIC_IP_CC)
+    elif args.protocol == 'icmp':
+        cc_sender = SHP_live_networking.prepare_icmp_sender(SHP_live_networking.STATIC_IP_CC)
+    else:
+        logging.error(f"Unknown protocol: {args.protocol}")
+        sys.exit(1)
 
-    start_shpserver(arp_sender, args.poi, args.reference, args.rtt, args.port, args.subnet, args.inputsource, args.deskew, args.bitlength, args.rounding_factor, args.subchanneling, args.subchanneling_bits, args.multihashing, args.ooodelivery, args.ecc, args.silence_poi, args.silence_cc, args.secret, args.savepcap)
+    start_shpserver(cc_sender, args.protocol, args.poi, args.reference, args.rtt, args.port, args.subnet, args.inputsource, args.deskew, args.bitlength, args.rounding_factor, args.subchanneling, args.subchanneling_bits, args.multihashing, args.ooodelivery, args.ecc, args.silence_poi, args.silence_cc, args.secret, args.savepcap)
     
     print("\nCapture stopped.")
    

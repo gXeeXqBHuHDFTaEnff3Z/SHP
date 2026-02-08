@@ -1,0 +1,56 @@
+{
+  "window_lengths": [
+    200,
+    250,
+    500,
+    1000,
+    1500
+  ],
+  "results_by_length": {
+    "200": {
+      "auc_mean": 0.5098059128864816,
+      "auc_ci": [
+        0.463332769126608,
+        0.5541426878808395
+      ],
+      "model_path": "results/gas_analysis_var/models/gas_lstm_L200.h5",
+      "metrics_path": "results/gas_analysis_var/metrics_L200.json"
+    },
+    "250": {
+      "auc_mean": 0.5030471601176346,
+      "auc_ci": [
+        0.4514403146369982,
+        0.5589262303794776
+      ],
+      "model_path": "results/gas_analysis_var/models/gas_lstm_L250.h5",
+      "metrics_path": "results/gas_analysis_var/metrics_L250.json"
+    },
+    "500": {
+      "auc_mean": 0.5051635111876076,
+      "auc_ci": [
+        0.41380163511187606,
+        0.5881848823866895
+      ],
+      "model_path": "results/gas_analysis_var/models/gas_lstm_L500.h5",
+      "metrics_path": "results/gas_analysis_var/metrics_L500.json"
+    },
+    "1000": {
+      "auc_mean": 0.5086258179654968,
+      "auc_ci": [
+        0.4003718024985128,
+        0.6545359904818558
+      ],
+      "model_path": "results/gas_analysis_var/models/gas_lstm_L1000.h5",
+      "metrics_path": "results/gas_analysis_var/metrics_L1000.json"
+    },
+    "1500": {
+      "auc_mean": 0.5198902606310014,
+      "auc_ci": [
+        0.38401920438957476,
+        0.6523662551440329
+      ],
+      "model_path": "results/gas_analysis_var/models/gas_lstm_L1500.h5",
+      "metrics_path": "results/gas_analysis_var/metrics_L1500.json"
+    }
+  }
+}

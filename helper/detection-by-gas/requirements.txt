@@ -1,0 +1,117 @@
+# GASanalysis Requirements
+# Version: 1.0.0
+# Date: 2025-10-12
+# Decision: ADR-0010 (Reproducibility - Pinned Versions)
+#
+# Installation:
+#   pip install -r requirements.txt
+
+# ==============================================================================
+# Core Dependencies
+# ==============================================================================
+
+# Python version: 3.10+
+# Tested on: Python 3.10.12
+
+# PCAP Processing (ADR-0001)
+scapy==2.5.0
+
+# Data Science and Numerical Computing
+numpy==1.24.3
+pandas==2.0.3
+scipy==1.11.1
+
+# Machine Learning (ADR-0002)
+tensorflow==2.13.0  # or tensorflow-gpu for GPU acceleration
+# Alternative: tensorflow-gpu==2.13.0
+keras==2.13.1  # Bundled with TensorFlow, but explicit for clarity
+
+# Statistical Analysis and Metrics (ADR-0008)
+scikit-learn==1.3.0
+
+# Visualization
+matplotlib==3.7.2
+seaborn==0.12.2
+
+# ==============================================================================
+# Configuration and Validation (ADR-0006)
+# ==============================================================================
+
+pyyaml==6.0.1
+pydantic==2.1.1
+
+# ==============================================================================
+# Logging and Observability (ADR-0009)
+# ==============================================================================
+
+python-json-logger==2.0.7
+colorama==0.4.6  # Cross-platform colored terminal output
+
+# ==============================================================================
+# Testing and Quality Assurance
+# ==============================================================================
+
+pytest==7.4.0
+pytest-cov==4.1.0
+pytest-xdist==3.3.1  # Parallel test execution
+
+# ==============================================================================
+# Development Tools (Optional)
+# ==============================================================================
+
+# Code Formatting
+black==23.7.0
+isort==5.12.0
+
+# Linting
+flake8==6.0.0
+mypy==1.4.1
+
+# Security Scanning
+bandit==1.7.5
+safety==2.3.5
+
+# Pre-commit Hooks
+pre-commit==3.3.3
+
+# ==============================================================================
+# Platform-Specific Notes
+# ==============================================================================
+
+# GPU Support:
+#   For NVIDIA GPU acceleration, install CUDA 11.8+ and use:
+#   pip install tensorflow-gpu==2.13.0
+#
+# Windows:
+#   Scapy on Windows requires Npcap: https://npcap.com/
+#
+# Linux:
+#   Ensure libpcap-dev is installed: sudo apt-get install libpcap-dev
+
+# ==============================================================================
+# Version Compatibility Matrix
+# ==============================================================================
+
+# Python 3.10:  All packages tested ✓
+# Python 3.11:  All packages tested ✓
+# Python 3.9:   TensorFlow 2.13 supported ✓
+# Python 3.12:  Some packages may need updates
+
+# TensorFlow 2.13 requires:
+#   - NumPy < 1.25
+#   - Python >= 3.8, < 3.12
+
+# ==============================================================================
+# Hash Verification (for supply chain security)
+# ==============================================================================
+
+# To generate hashes for pinned dependencies:
+#   pip hash <package>==<version> >> requirements.txt
+#
+# To install with hash checking:
+#   pip install --require-hashes -r requirements.txt
+
+# Example hashes (uncomment for production):
+# numpy==1.24.3 \
+#     --hash=sha256:... \
+#     --hash=sha256:...

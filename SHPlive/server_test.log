@@ -1,0 +1,19 @@
+[INFO] Detected active interface: eth0
+[INFO] Default gateway for this route: 172.31.195.196 (metric 172.31.192.1)
+[ERROR] Scapy sniff permission check failed:
+  [Errno 1] Operation not permitted: Traceback (most recent call last):
+  File "/mnt/c/Users/Chris/Documents/GitHub/SHP/SHPlive/utils/SHP_live_networking.py", line 25, in check_scapy_sniff_permission
+    sniff(count=0, timeout=0.1)
+  File "/home/chris/.local/lib/python3.11/site-packages/scapy/sendrecv.py", line 1438, in sniff
+    sniffer._run(*args, **kwargs)
+  File "/home/chris/.local/lib/python3.11/site-packages/scapy/sendrecv.py", line 1283, in _run
+    sniff_sockets[_RL2(iface)(type=ETH_P_ALL, iface=iface,
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chris/.local/lib/python3.11/site-packages/scapy/arch/linux/__init__.py", line 219, in __init__
+    self.ins = socket.socket(
+               ^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/socket.py", line 232, in __init__
+    _socket.socket.__init__(self, family, type, proto, fileno)
+PermissionError: [Errno 1] Operation not permitted
+
+You must run this script with root privileges or use sudo.

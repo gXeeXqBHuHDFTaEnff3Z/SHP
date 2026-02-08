@@ -1,0 +1,16 @@
+{
+  "window_lengths": [
+    200
+  ],
+  "results_by_length": {
+    "200": {
+      "auc_mean": 0.5180433310765065,
+      "auc_ci": [
+        0.4609303768900926,
+        0.5717202663055743
+      ],
+      "model_path": "results/gas_analysis/models/gas_lstm_L200.h5",
+      "metrics_path": "results/gas_analysis/metrics_L200.json"
+    }
+  }
+}

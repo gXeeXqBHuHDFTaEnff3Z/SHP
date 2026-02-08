@@ -1,0 +1,47 @@
+% SHP ARP detectability using a GAS-style, ARP-trained model
+\subsection{Detectability of SHP ARP Signaling with a GAS-style Model}
+\label{sec:shp-gas-arp}
+
+We evaluate whether \ac{SHP}'s ARP-based signal channel is detectable by a GAS-style timing-channel detector when trained \emph{in-domain} on legitimate ARP inter-arrival times (IPDs). This isolates the signal channel and avoids confounding domain shifts that arise when models trained on flow IPDs (e.g., HTTP/SSH) are applied to ARP.
+
+\textbf{Feature extraction.} Following \cite{li2022GAS}, we transform continuous IPD sequences into a 16-state discrete alphabet using a context-aware variation encoding. For each center position $i$ in the IPD sequence, we compute forward and backward derivatives on aligned center points: $f_i = \mathrm{IPD}_{i+1} - \mathrm{IPD}_{i}$ and $b_i = \mathrm{IPD}_{i-1} - \mathrm{IPD}_{i}$. We then form a 4-bit code from the signs $\mathbb{1}[f_i > 0]$, $\mathbb{1}[b_i > 0]$ and magnitudes $\mathbb{1}[|f_i| > m_f]$, $\mathbb{1}[|b_i| > m_b]$, where $m_f$ and $m_b$ are the medians of $|f|$ and $|b|$ computed on the training set (legitimate ARP only). These medians are reused for validation and test to prevent discretization leakage.
+
+\textbf{Preprocessing.} Prior to discretization we apply optional quantile clipping to IPDs to reduce the impact of extreme outliers introduced by capture artifacts or rare bursts. Unless noted otherwise, we clip to the $[0.5\%, 99.5\%]$ quantiles computed per dataset and retain the clipped values for all downstream steps. Disabling clipping did not materially change our conclusions.
+
+\textbf{Alternate discretization.} In addition to variation encoding, we implemented the 16-bin quantile discretization described in \cite{li2022GAS} and used it as an ablation. Across $L \in \{200, 250, 500, 1000, 1500\}$, AUCs and TPR@FPR remained within the bootstrap confidence intervals of the variation-based results; we therefore report variation encoding as the primary method for ARP.
+
+\textbf{Model.} We adopt GAS's sequence prediction architecture: an embedding layer over the 16 discrete states, followed by a single LSTM layer and a dense softmax output over the next-state vocabulary. We use a sequence length (time step) of 8, an embedding dimension of 100, and 64 LSTM units, consistent with \cite{li2022GAS} and effective for SHP's sparsity regime.
+
+\textbf{Windows and scoring.} We segment the discretized streams into non-overlapping windows of length $L \in \{200, 250, 500, 1000, 1500\}$ IPDs (including $L{=}250$ to compare with the sensitivity reported by \cite{li2022GAS}). For each window, we construct next-state prediction pairs and compute the mean sparse categorical cross-entropy loss under the legitimate model, mirroring the GAS evaluation. Higher losses indicate greater deviation from legitimate ARP dynamics. We report ROC AUC (SHP windows as positives) and TPR at 1\% FPR, each with 95\% bootstrap confidence intervals (1{,}000 resamples stratified by class). Window sizes balance ARP sparsity and detection latency; smaller sizes (e.g., $L{=}100$) may provide insufficient evidence on quiet networks, while larger sizes increase latency.
+
+\textbf{Threat model and vantage.} The observer is a passive LAN host sharing the L2 broadcast domain with \ac{CS}/\ac{CR}. We analyze ARP requests (op=1) only, which are broadcast and consistently observable; unicast ARP replies are excluded to avoid vantage bias. This setup isolates the signal channel and prevents confounding from higher-layer flows.
+
+\textbf{Splits and leakage control.} We train the discretization medians and the model on legitimate ARP windows only, using session-level splits (disjoint capture sessions for train/validation/test). Discretization medians computed on training sessions are reused for validation and test (no re-fitting). Windows are contiguous within captures and non-overlapping across splits to preserve temporal structure.
+
+\textbf{Scope.} This in-domain evaluation applies to ARP request signal-channel detectability at a LAN broadcast-domain vantage. It complements classic detector tests covered elsewhere in this paper and does not make claims about indirect effects on higher-layer flow IPDs.
+
+\paragraph*{Implementation and results.}
+We implemented the variation-based 16-state discretization from \cite{li2022GAS} (4-bit code from forward/backward signs and magnitudes, with $m_f$ and $m_b$ medians fit on train-only legitimate ARP) and trained a single-layer LSTM (embedding 100D, 64 units, $T{=}8$) strictly in-domain on legitimate ARP request IPDs. We evaluated on held-out legitimate vs. SHP windows generated from independent captures. Across $L \in \{200, 250, 500, 1000, 1500\}$, the ROC AUC remained close to chance with tight-to-moderate 95\% CIs and very low TPR at 1\% FPR (near zero). Figure~\ref{fig:gas-arp-auc} summarizes AUC versus window length; detailed per-length metrics are provided in the accompanying CSV.
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=0.95\linewidth]{length_comparison.png}
+  \caption{SHP ARP detectability (in-domain GAS-style model): AUC vs. window length. Error bars indicate 95\% bootstrap CIs.}
+  \label{fig:gas-arp-auc}
+\end{figure}
+
+For completeness, Fig.~\ref{fig:gas-arp-roc-l200} illustrates the ROC curve for $L{=}200$ (a typical setting), with the 95\% CI for AUC indicated in the legend. Figure~\ref{fig:gas-arp-roc-composite} aggregates ROC curves across all window lengths, showing that curves lie close to the random diagonal for each $L$, consistent with the AUC trends in Fig.~\ref{fig:gas-arp-auc}. The numeric results used to generate these figures are provided as a CSV\footnote{CSV file: \texttt{summary\_table.csv}.} colocated with this section, to facilitate re-plotting or integration into composite figures.
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=0.95\linewidth]{roc_curve_L200.png}
+  \caption{ROC curve for $L{=}200$ using the in-domain GAS-style model (variation discretization).}
+  \label{fig:gas-arp-roc-l200}
+\end{figure}
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=0.95\linewidth]{roc_composite.png}
+  \caption{Composite ROC curves for $L\in\{200,250,500,1000,1500\}$ using the in-domain GAS-style model. Legends indicate AUC per curve.}
+  \label{fig:gas-arp-roc-composite}
+\end{figure}

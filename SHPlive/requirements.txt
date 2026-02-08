@@ -1,0 +1,9 @@
+scapy
+pandas
+pycryptodomex
+reedsolo
+
+# Non-Python runtime dependency (required by Scapy when using sniff(filter=...)):
+# - Linux: install libpcap (+ tcpdump, e.g. `sudo apt install libpcap-dev tcpdump`)
+# - Windows: install Npcap with WinPcap API-compatible mode enabled
+# - macOS: libpcap is included, ensure tcpdump is available

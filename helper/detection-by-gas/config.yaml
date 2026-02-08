@@ -1,0 +1,351 @@
+# GASanalysis Configuration File
+# Version: 1.0.0
+# Date: 2025-10-12
+# Decision: ADR-0006 (Configuration via YAML with Runtime Schema Validation)
+#
+# This configuration file controls all parameters for the GAS-style detectability
+# analysis of SHP ARP signaling. All values are validated at runtime using Pydantic
+# schema validation with fail-fast error reporting.
+
+# ==============================================================================
+# Project Metadata
+# ==============================================================================
+project:
+  name: "GASanalysis"
+  version: "1.0.0"
+  description: "GAS-Style Detectability Analysis of SHP ARP Signaling"
+  random_seed: 42  # ADR-0010: Reproducibility via deterministic seeds
+
+# ==============================================================================
+# File Paths and Data Locations
+# ==============================================================================
+paths:
+  # Root directories
+  data_root: "data"
+  results_root: "results"
+  logs_root: "logs"
+
+  # Input data patterns (glob-compatible)
+  legitimate_pcaps: "data/legitimate/*.pcap"
+  shp_pcaps: "data/shp_signals/*.pcap"
+
+  # Intermediate data directories
+  ipd_csvs_dir: "data"  # IPD CSVs stored alongside PCAPs
+  windows_dir: "data/windows"
+
+  # Output directories
+  gas_analysis_dir: "results/gas_analysis"
+  statistical_dir: "results/statistical"
+
+  # Specific output files
+  results_json: "results/gas_analysis/shp_arp_gaslike_results.json"
+  summary_csv: "results/statistical/summary_table.csv"
+  performance_plot: "results/statistical/shp_arp_detection_performance.png"
+  session_manifest: "results/session_manifest.md"
+
+# ==============================================================================
+# Stage 1: PCAP Processing and IPD Extraction
+# Decision: ADR-0001 (ARP Request-Only Traffic)
+# ==============================================================================
+extraction:
+  # Protocol and packet filtering
+  protocol: "ARP"  # Only ARP packets
+  operation: 1  # ARP request only (op=1)
+
+  # IPD computation
+  ipdunit: "ms"  # Inter-packet delays in milliseconds
+
+  # Optional quantile-based outlier clipping
+  # Set to null to disable, or [low, high] quantiles (e.g., [0.005, 0.995])
+  quantile_clipping: [0.005, 0.995]  # Remove bottom 0.5% and top 0.5%
+
+  # Input validation
+  max_pcap_size_gb: 5.0  # Maximum PCAP file size (security)
+  min_arp_requests: 2  # Minimum ARP requests required
+
+  # Performance
+  parallel_workers: 4  # Number of parallel PCAP processing workers
+
+# ==============================================================================
+# Stage 2: Time Series Windowing
+# Decision: ADR-0003 (Non-Overlapping Windowing)
+# ==============================================================================
+windowing:
+  # Window lengths to generate (in number of IPDs)
+  lengths: [200, 250, 500, 1000, 1500]
+
+  # Windowing strategy
+  stride_factor: 1.0  # Non-overlapping: stride = length * stride_factor
+  overlap: false  # ADR-0003: No overlapping windows
+
+  # Session boundaries
+  respect_session_boundaries: true  # Windows never cross sessions
+
+  # Storage format
+  compression: true  # Use NPZ (compressed) instead of NPY
+  dtype: "float32"  # Data type for windows
+
+# ==============================================================================
+# Stage 3a: Data Splitting
+# Decision: ADR-0004 (Session-Level Train-Val-Test Split)
+# ==============================================================================
+sessions:
+  # Training set (legitimate traffic only)
+  train: [1, 2, 3, 4, 5, 6]  # Baseline sessions for training
+
+  # Validation set (legitimate traffic only)
+  val: [7, 8]  # For early stopping
+
+  # Test set (legitimate + SHP)
+  test: [9, 10]  # Baseline sessions for test (all SHP sessions automatically included)
+
+  # Validation
+  validate_no_leakage: true  # Ensure train/val/test are disjoint
+
+# ==============================================================================
+# Stage 3b: Discretization
+# Decision: ADR-0005 (16-State Discretization with Derivative Features)
+# ==============================================================================
+discretization:
+  # Number of discrete states
+  num_states: 16  # GAS paper standard
+
+  # Discretization method
+  method: "variation_16"  # GAS-style variation coding (fs, bs, fm, bm)
+
+  # Feature engineering (not used for variation_16)
+  include_derivatives: false
+
+  # Fitting
+  fit_on_train_only: true  # ADR-0004: Prevent data leakage
+
+# ==============================================================================
+# Stage 3c: GAS-LSTM Model Architecture and Training
+# Decision: ADR-0002 (GAS-Style LSTM Model)
+# ==============================================================================
+model:
+  # Architecture type
+  architecture: "GAS-LSTM"  # Fixed architecture
+
+  # Model hyperparameters
+  embedding_dim: 100  # State embedding dimension
+  lstm_units: 64  # LSTM hidden units
+  sequence_length: 8  # Time steps per sequence (T)
+  output_states: 16  # Must match discretization.num_states
+
+  # Training configuration
+  loss: "sparse_categorical_crossentropy"  # Next-state prediction loss
+  optimizer: "adam"  # Optimizer
+  learning_rate: 0.001  # Initial learning rate
+
+  # Training hyperparameters
+  epochs: 3  # Maximum epochs (reduced for smoke test)
+  batch_size: 128  # Batch size (reduce if OOM)
+  validation_split: 0.0  # Use explicit val set (not random split)
+
+  # Early stopping
+  early_stopping_patience: 5  # Stop after 5 epochs without val loss improvement
+  restore_best_weights: true  # Restore weights from best epoch
+
+  # Model checkpointing
+  save_best_model: true  # Save best model during training
+  model_save_path: "results/models/gas_lstm_L{length}.h5"  # Parameterized by window length
+
+# ==============================================================================
+# Stage 3d: Anomaly Scoring
+# Decision: ADR-0002 (Mean CCE Loss as Anomaly Score)
+# ==============================================================================
+scoring:
+  # Scoring method
+  method: "mean_cce_loss"  # Mean cross-entropy loss per window
+
+  # Batch size for inference
+  batch_size: 256  # Larger than training for faster inference
+
+  # Normalization
+  normalize_scores: false  # Keep raw loss values
+
+# ==============================================================================
+# Stage 3e: Performance Metrics
+# Decision: ADR-0008 (Bootstrap Confidence Intervals)
+# ==============================================================================
+metrics:
+  # Bootstrap resampling
+  bootstrap_resamples: 100  # Number of bootstrap resamples (reduced for smoke test)
+  confidence_level: 0.95  # 95% confidence intervals
+  stratified_sampling: true  # Maintain class balance in resamples
+
+  # Metrics to compute
+  metrics:
+    - "auc"  # AUC-ROC
+    - "tpr_at_fpr_1pct"  # TPR at 1% FPR
+
+  # Additional thresholds for TPR computation (optional)
+  fpr_thresholds: [0.01, 0.05, 0.10]  # FPR levels for TPR
+
+# ==============================================================================
+# Logging Configuration
+# Decision: ADR-0009 (JSON Structured Logging with ADR Traceability)
+# ==============================================================================
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+
+  # Log format
+  format: "json"  # JSON-structured logs
+
+  # Console output
+  console_enabled: true  # Enable colored console output
+  console_colors: true  # Use ANSI colors (yellow warnings, red errors)
+
+  # File logging
+  file_enabled: true  # Enable file logging
+  log_file: "logs/gas_analysis.log"
+
+  # Log rotation
+  rotation: "10MB"  # Rotate at 10 MB
+  backup_count: 5  # Keep 5 backup files
+
+  # ADR traceability
+  include_adr_ids: true  # Always include decision_ids in logs
+
+  # Progress reporting
+  progress_bars: true  # Show tqdm progress bars
+
+# ==============================================================================
+# Performance and Resource Configuration
+# Decision: docs/performance.md
+# ==============================================================================
+performance:
+  # GPU acceleration
+  gpu_enabled: true  # Use GPU if available
+  gpu_memory_growth: true  # Allow dynamic GPU memory allocation
+
+  # CPU configuration
+  num_workers: 4  # Parallel workers for data loading
+  inter_op_parallelism: 1  # TensorFlow inter-op threads (1 for determinism)
+  intra_op_parallelism: 1  # TensorFlow intra-op threads (1 for determinism)
+
+  # Memory management
+  cache_windows: true  # Cache windows in memory (faster but uses more RAM)
+  batch_processing: true  # Process in batches to limit memory usage
+
+  # Timeouts
+  pcap_parse_timeout_sec: 600  # Max 10 minutes per PCAP
+  training_timeout_sec: 3600  # Max 1 hour per training run
+
+# ==============================================================================
+# Validation and Quality Assurance
+# Decision: Mission Statement section 8
+# ==============================================================================
+validation:
+  # Input validation
+  validate_pcap_integrity: true  # Check PCAP magic bytes
+  validate_session_counts: true  # Verify expected session counts
+
+  # Data quality checks
+  min_ipd_ms: 0.1  # Minimum valid IPD (ms)
+  max_ipd_ms: 10000.0  # Maximum valid IPD (ms)
+
+  # Leakage prevention
+  check_no_session_leakage: true  # Verify train/test split integrity
+  check_discretizer_fit: true  # Verify discretizer fit on train only
+
+  # Reproducibility
+  verify_reproducibility: true  # Check deterministic behavior
+  tolerance: 1e-6  # Numerical tolerance for reproducibility checks
+
+# ==============================================================================
+# Ablation Studies (Optional)
+# Decision: Mission Statement section 9
+# ==============================================================================
+ablations:
+  # Enable ablation studies
+  enabled: false  # Set to true to run ablations
+
+  # Sequence length ablation
+  sequence_lengths: [4, 8, 16]  # Alternative T values
+
+  # Discretization ablation
+  discretization_methods: ["quantile", "uniform"]  # Alternative binning methods
+  quantile_ranges: [[0.4, 0.6], [0.3, 0.7]]  # Alternative quantile thresholds
+
+  # Traffic type ablation
+  include_arp_replies: false  # Test with ARP replies (op=2) included
+
+# ==============================================================================
+# Output and Reporting
+# ==============================================================================
+output:
+  # Output formats
+  json_indent: 2  # Pretty-print JSON with 2-space indent
+  csv_sep: ","  # CSV separator
+
+  # Plotting
+  figure_dpi: 300  # High resolution for publication
+  figure_format: "png"  # Output format (png, pdf, svg)
+  plot_style: "seaborn-v0_8-darkgrid"  # Matplotlib style
+
+  # Versioning
+  include_metadata: true  # Include version info in outputs
+  include_config_snapshot: true  # Save config snapshot in results
+
+# ==============================================================================
+# Experimental Configuration
+# ==============================================================================
+experiment:
+  # Experiment identification
+  name: "SHP_ARP_Detectability_GAS"  # Experiment name
+  date: "2025-10-12"  # Experiment date
+
+  # Hardware/environment info (for reproducibility)
+  platform: "linux"  # linux, windows, darwin
+  python_version: "3.10"  # Python version
+
+  # Data collection metadata
+  shp_distances: [50, 100, 200, 500, 1000]  # SHP distances tested (mm)
+  sessions_per_distance: 15  # Sessions per distance
+  capture_duration_min: 20  # Minutes per session
+
+  # Notes
+  notes: |
+    GAS-style LSTM-based detection of SHP covert channels in ARP traffic.
+    Implements methodology from mission_statement.md with full ADR traceability.
+
+# ==============================================================================
+# Safety and Security
+# Decision: docs/security.md
+# ==============================================================================
+security:
+  # Input validation
+  allow_absolute_paths: false  # Reject absolute paths (path traversal protection)
+  max_path_length: 256  # Maximum path length
+
+  # File access
+  restrict_to_project_dir: true  # Only access files within project directory
+
+  # Execution safety
+  disable_eval: true  # Never use eval() or exec()
+  disable_shell_commands: true  # No shell=True in subprocess
+
+# ==============================================================================
+# Developer and Debug Configuration
+# ==============================================================================
+debug:
+  # Debug mode
+  enabled: false  # Enable verbose debugging
+
+  # TensorFlow debugging
+  tf_log_device_placement: false  # Log device placement
+  tf_enable_eager_execution: false  # Eager execution for debugging
+
+  # Profiling
+  profile_stages: false  # Profile each stage with cProfile
+  memory_profiling: false  # Profile memory usage
+
+  # Dry run
+  dry_run: false  # Preview actions without execution
+
+  # Testing
+  use_small_dataset: false  # Use reduced dataset for faster testing
+  skip_gpu: false  # Force CPU even if GPU available
